@@ -17,6 +17,29 @@ function snapshotName(): string {
   return `cb_${timestamp}_${randomBytes(5).toString('hex')}`;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function validatePayload(snapshot: Snapshot): void {
+  const { project, work, provenance } = snapshot;
+  const strings = (value: unknown): boolean => Array.isArray(value) && value.every((item) => typeof item === 'string');
+  if (typeof snapshot.createdAt !== 'string' || !Number.isFinite(Date.parse(snapshot.createdAt)) ||
+      !isRecord(project) || typeof project.name !== 'string' ||
+      !(project.branch === null || typeof project.branch === 'string') ||
+      !(project.commit === null || typeof project.commit === 'string') ||
+      !(project.dirty === null || typeof project.dirty === 'boolean') ||
+      !strings(project.changedFiles) || typeof project.filesTruncated !== 'boolean' ||
+      !isRecord(work) || typeof work.objective !== 'string' || !work.objective.trim() ||
+      typeof work.nextStep !== 'string' || !work.nextStep.trim() ||
+      !strings(work.decisions) || !strings(work.knownLimitations) ||
+      !isRecord(provenance) || provenance.workFields !== 'user-supplied' ||
+      !['git-cli', 'unavailable'].includes(provenance.gitFields as string) ||
+      provenance.conversationHistoryCaptured !== false) {
+    throw new Error('Invalid snapshot data. Create a new checkpoint with the supported schema.');
+  }
+}
+
 export async function createCheckpoint(root: string, input: CheckpointInput): Promise<Snapshot> {
   await loadConfig(root);
   if (!input.objective.trim() || !input.nextStep.trim()) {
@@ -66,15 +89,17 @@ export async function verifyLatest(root: string): Promise<Snapshot> {
   await loadConfig(root);
   const dir = storeDir(root);
   const state = await readJson<State>(join(dir, 'state.json'));
-  if (state.schemaVersion !== 1 || !/^cb_[a-zA-Z0-9_]+$/.test(state.latestSnapshotId)) {
+  if (!isRecord(state) || state.schemaVersion !== 1 || typeof state.latestSnapshotId !== 'string' ||
+      !/^cb_[a-zA-Z0-9_]+$/.test(state.latestSnapshotId)) {
     throw new Error('Invalid snapshot pointer.');
   }
   const snapshot = await readJson<Snapshot>(join(dir, 'snapshots', `${state.latestSnapshotId}.json`));
-  if (snapshot.schemaVersion !== 1 || snapshot.id !== state.latestSnapshotId) {
+  if (!isRecord(snapshot) || snapshot.schemaVersion !== 1 || snapshot.id !== state.latestSnapshotId) {
     throw new Error('Snapshot identity or schema mismatch.');
   }
-  if (!/^[a-f0-9]{64}$/.test(snapshot.digest)) throw new Error('Invalid snapshot digest.');
+  if (typeof snapshot.digest !== 'string' || !/^[a-f0-9]{64}$/.test(snapshot.digest)) throw new Error('Invalid snapshot digest.');
   const { digest, ...payload } = snapshot;
   if (digestOf(payload) !== digest) throw new Error('Snapshot integrity check failed.');
+  validatePayload(snapshot);
   return snapshot;
 }

@@ -24,7 +24,8 @@
 - [ ] Validate supported hook events and payload schemas for both agents.
 - [ ] Implement Claude Code skill, local hooks and context telemetry where available.
 - [ ] Implement Codex skill, hooks and telemetry where available.
-- [ ] Implement `next` to create a **new** session and initialize it from verified state.
+- [x] Implement `next --agent codex` to create a **new** interactive session from verified state.
+- [ ] Implement the Claude Code assisted `next` adapter.
 - [ ] Report unsupported capabilities without guessing a context percentage.
 
 ## M3 — Managed automatic mode
