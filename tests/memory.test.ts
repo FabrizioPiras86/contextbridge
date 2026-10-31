@@ -1,4 +1,8 @@
 import { test } from 'node:test';
+import type { TestContext } from 'node:test';
+import fs from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
+import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
 import { appendFile, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -92,7 +96,7 @@ test('interrupted tails recover across repeated writes without rewriting any jou
   const f = await fixture(t);
   const first = event();
   await appendMemory(f.root, first);
-  for (const tail of ['{"schemaVersion":', JSON.stringify(event('Uncommitted complete JSON')), '{another partial']) {
+  for (const tail of ['{"schemaVersion":', '{another partial']) {
     await appendFile(f.path, tail);
     const before = await readFile(f.path);
     assert.equal((await listMemory(f.root)).incompleteTail, true);
@@ -103,7 +107,7 @@ test('interrupted tails recover across repeated writes without rewriting any jou
     assert.equal(result.incompleteTail, false);
     assert.deepEqual(result.events.at(-1), next);
   }
-  assert.equal((await listMemory(f.root)).events.length, 4);
+  assert.equal((await listMemory(f.root)).events.length, 3);
 });
 
 test('writer lock fails safely after a simulated process crash and supports operator recovery', async (t) => {
@@ -218,4 +222,183 @@ test('all event types round-trip and CRLF records remain compatible across hosts
   assert.deepEqual((await listMemory(f.root)).events, events);
   await appendMemory(f.root, event());
   assert.equal((await listMemory(f.root)).events.length, 5);
+});
+
+
+test('complete unterminated events are readable, checkpointed and sealed without rewriting or markers', async (t) => {
+  const f = await fixture(t);
+  await mkdir(f.dir);
+  const recovered = event('Complete interrupted event');
+  await writeFile(f.path, JSON.stringify(recovered));
+  const before = await readFile(f.path);
+  const expected = { recovered: [{ offset: 0, id: recovered.id }], abandoned: [] };
+  for (let i = 0; i < 2; i++) {
+    const listed = await listMemory(f.root);
+    assert.deepEqual(listed, { events: [recovered], incompleteTail: false, recovery: expected });
+    assert.deepEqual((await selectCheckpointMemory(f.root)).events, [recovered]);
+    assert.deepEqual(await readFile(f.path), before);
+  }
+  const next = event();
+  assert.deepEqual(await appendMemory(f.root, next), expected);
+  assert.deepEqual(await readFile(f.path), Buffer.concat([before, Buffer.from('\n' + JSON.stringify(next) + '\n')]));
+  assert.deepEqual((await listMemory(f.root)).events, [recovered, next]);
+  await assert.rejects(stat(join(f.dir, 'recovery')), { code: 'ENOENT' });
+});
+
+test('unterminated duplicate IDs and complete invalid schemas fail closed without writes', async (t) => {
+  const f = await fixture(t);
+  const first = event();
+  await appendMemory(f.root, first);
+  const prefix = await readFile(f.path);
+  for (const tail of [JSON.stringify(first), 'null', JSON.stringify({ ...event(), type: 'invalid' })]) {
+    const bytes = Buffer.concat([prefix, Buffer.from(tail)]);
+    await writeFile(f.path, bytes);
+    await assert.rejects(listMemory(f.root));
+    await assert.rejects(appendMemory(f.root, event()));
+    assert.deepEqual(await readFile(f.path), bytes);
+  }
+  const recoverable = event();
+  await writeFile(f.path, JSON.stringify(recoverable));
+  await assert.rejects(appendMemory(f.root, recoverable), /Duplicate/);
+  assert.equal(await readFile(f.path, 'utf8'), JSON.stringify(recoverable));
+});
+
+test('legacy markers remain authoritative before and after sealing and reserve valid excluded IDs', async (t) => {
+  const f = await fixture(t);
+  await mkdir(join(f.dir, 'recovery'), { recursive: true });
+  const excluded = event();
+  const bytes = Buffer.from(JSON.stringify(excluded));
+  const marker = { offset: 0, digest: createHash('sha256').update(bytes).digest('hex') };
+  const markerPath = join(f.dir, 'recovery', '0.json');
+  await writeFile(markerPath, JSON.stringify(marker));
+  const markerBytes = await readFile(markerPath);
+  for (const suffix of ['', '\n']) {
+    await writeFile(f.path, Buffer.concat([bytes, Buffer.from(suffix)]));
+    const listed = await listMemory(f.root);
+    assert.deepEqual(listed.events, []);
+    assert.deepEqual(listed.recovery, { recovered: [], abandoned: [marker] });
+    await assert.rejects(appendMemory(f.root, excluded), /Duplicate/);
+    const next = event();
+    assert.deepEqual(await appendMemory(f.root, next), { recovered: [], abandoned: [marker] });
+    assert.deepEqual((await listMemory(f.root)).events, [next]);
+    assert.deepEqual(await readFile(markerPath), markerBytes);
+  }
+  await writeFile(f.path, bytes);
+  await writeFile(markerPath, JSON.stringify({ ...marker, digest: 'wrong' }));
+  await assert.rejects(listMemory(f.root), /recovery marker/);
+  await assert.rejects(appendMemory(f.root, event()), /recovery marker/);
+});
+
+test('repeated interruptions at marker, seal, partial event and complete event boundaries are deterministic', async (t) => {
+  const f = await fixture(t);
+  await mkdir(join(f.dir, 'recovery'), { recursive: true });
+  const partial = Buffer.from('{"schemaVersion":');
+  const marker = { offset: 0, digest: createHash('sha256').update(partial).digest('hex') };
+  await writeFile(join(f.dir, 'recovery', '0.json'), JSON.stringify(marker));
+  const complete = event();
+  const next = event();
+  for (const suffix of ['', '\n', '\n{"schemaVersion":', '\n' + JSON.stringify(complete)]) {
+    const before = Buffer.concat([partial, Buffer.from(suffix)]);
+    await writeFile(f.path, before);
+    // Remove markers from previous simulated histories only in this test fixture.
+    await rm(join(f.dir, 'recovery', `${partial.length + 1}.json`), { force: true });
+    const firstRead = await listMemory(f.root);
+    assert.deepEqual(await listMemory(f.root), firstRead);
+    const report = await appendMemory(f.root, next);
+    assert.deepEqual((await readFile(f.path)).subarray(0, before.length), before);
+    assert.deepEqual((await listMemory(f.root)).events, suffix.includes(complete.id) ? [complete, next] : [next]);
+    assert.equal(report.abandoned.length, suffix === '\n{"schemaVersion":' ? 2 : 1);
+    assert.equal(report.recovered.length, suffix.includes(complete.id) ? 1 : 0);
+  }
+});
+
+// Patch the built-in ESM binding only within a test; always restore it afterwards.
+function interceptLock(t: TestContext, onLock: (handle: Awaited<ReturnType<typeof fs.open>>) => void) {
+  const original = fs.open;
+  t.mock.method(fs, 'open', async (...args: Parameters<typeof fs.open>) => {
+    const handle = await original(...args);
+    if (String(args[0]).endsWith('writer.lock')) onLock(handle);
+    return handle;
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+}
+
+test('lock close failure still removes the owned lock and reports uncertain append success', async (t) => {
+  const f = await fixture(t);
+  const closeError = new Error('Injected close failure');
+  interceptLock(t, (handle) => {
+    const close = handle.close.bind(handle);
+    handle.close = async () => { await close(); throw closeError; };
+  });
+  const next = event();
+  await assert.rejects(appendMemory(f.root, next), (error: AggregateError) => {
+    assert.deepEqual(error.errors, [closeError]);
+    return true;
+  });
+  await assert.rejects(stat(join(f.dir, 'writer.lock')), { code: 'ENOENT' });
+  assert.deepEqual((await listMemory(f.root)).events, [next]);
+});
+
+test('append failure remains the cause when lock close also fails', async (t) => {
+  const f = await fixture(t);
+  const first = event();
+  await appendMemory(f.root, first);
+  const closeError = new Error('Injected close failure');
+  interceptLock(t, (handle) => {
+    const close = handle.close.bind(handle);
+    handle.close = async () => { await close(); throw closeError; };
+  });
+  await assert.rejects(appendMemory(f.root, first), (error: AggregateError) => {
+    assert.match((error.cause as Error).message, /Duplicate/);
+    assert.equal(error.errors[0], error.cause);
+    assert.equal(error.errors[1], closeError);
+    return true;
+  });
+  await assert.rejects(stat(join(f.dir, 'writer.lock')), { code: 'ENOENT' });
+});
+
+test('lock cleanup preserves a replacement lock owned by another writer', async (t) => {
+  const f = await fixture(t);
+  const lockPath = join(f.dir, 'writer.lock');
+  interceptLock(t, (handle) => {
+    const close = handle.close.bind(handle);
+    handle.close = async () => {
+      await close();
+      await fs.rename(lockPath, lockPath + '.previous');
+      await writeFile(lockPath, 'Replacement writer');
+    };
+  });
+  await appendMemory(f.root, event());
+  assert.equal(await readFile(lockPath, 'utf8'), 'Replacement writer');
+});
+
+
+test('truncated UTF-8 tails are excluded and reported without losing later events', async (t) => {
+  const f = await fixture(t);
+  await mkdir(f.dir);
+  const bytes = Buffer.concat([Buffer.from('{"content":"'), Buffer.from([0xe2, 0x82])]);
+  await writeFile(f.path, bytes);
+  assert.equal((await listMemory(f.root)).incompleteTail, true);
+  const next = event();
+  const report = await appendMemory(f.root, next);
+  assert.deepEqual(report.abandoned, [{ offset: 0, digest: createHash('sha256').update(bytes).digest('hex') }]);
+  assert.deepEqual((await listMemory(f.root)).events, [next]);
+  assert.deepEqual((await readFile(f.path)).subarray(0, bytes.length), bytes);
+});
+
+test('duplicate valid IDs across marked and unmarked records fail closed', async (t) => {
+  const f = await fixture(t);
+  const first = event();
+  await appendMemory(f.root, first);
+  const prefix = await readFile(f.path);
+  const bytes = Buffer.from(JSON.stringify(first));
+  await appendFile(f.path, bytes);
+  await mkdir(join(f.dir, 'recovery'));
+  await writeFile(join(f.dir, 'recovery', `${prefix.length}.json`), JSON.stringify({
+    offset: prefix.length, digest: createHash('sha256').update(bytes).digest('hex'),
+  }));
+  await assert.rejects(listMemory(f.root), /Duplicate/);
+  await assert.rejects(appendMemory(f.root, event()), /Duplicate/);
+  assert.deepEqual(await readFile(f.path), Buffer.concat([prefix, bytes]));
 });

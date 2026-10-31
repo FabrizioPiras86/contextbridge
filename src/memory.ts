@@ -1,3 +1,4 @@
+import type { BigIntStats } from 'node:fs';
 import { isUtf8 } from 'node:buffer';
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, readFile, unlink } from 'node:fs/promises';
@@ -92,29 +93,58 @@ async function journalDir(root: string, create = false): Promise<string> {
 function hash(bytes: Buffer): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
-interface Scan { tail?: { offset: number; digest: string }; count: number }
-async function scan(dir: string, visit: (event: MemoryEvent) => void): Promise<Scan> {
+export interface MemoryRecovery {
+  recovered: { offset: number; id: string }[];
+  abandoned: { offset: number; digest: string }[];
+}
+interface Scan {
+  tail?: { offset: number; digest: string; abandoned: boolean };
+  count: number;
+  recovery: MemoryRecovery;
+}
+async function scan(dir: string, visit: (event: MemoryEvent) => void, reserveId?: (id: string) => void): Promise<Scan> {
   const path = join(dir, 'events.jsonl');
-  if (!await safeEntry(path, false)) return { count: 0 };
+  const recovery: MemoryRecovery = { recovered: [], abandoned: [] };
+  if (!await safeEntry(path, false)) return { count: 0, recovery };
   const file = await open(path, 'r');
   const ids = new Set<string>();
   let pending = Buffer.alloc(0), offset = 0, count = 0;
-  async function line(bytes: Buffer): Promise<void> {
-    const text = bytes.toString('utf8');
+  function parse(bytes: Buffer): MemoryEvent {
+    if (!isUtf8(bytes)) throw new Error(`Invalid UTF-8 journal record at byte ${offset}.`);
+    const event: unknown = JSON.parse(bytes.toString('utf8'));
+    validateMemoryEvent(event);
+    return event;
+  }
+  function reserve(event: MemoryEvent): void {
+    if (ids.has(event.id)) throw new Error('Duplicate memory event identifier.');
+    ids.add(event.id);
+    reserveId?.(event.id);
+  }
+  async function line(bytes: Buffer, unterminated = false): Promise<boolean> {
     const marker = join(dir, 'recovery', `${offset}.json`);
     if (await safeEntry(marker, false)) {
       const saved = JSON.parse(await readFile(marker, 'utf8'));
       if (saved.offset !== offset || saved.digest !== hash(bytes)) throw new Error('Invalid journal recovery marker.');
-      return;
+      // Legacy markers remain authoritative, but valid excluded IDs stay reserved.
+      let excluded: MemoryEvent | undefined;
+      try { excluded = parse(bytes); } catch { /* A marker may describe an invalid fragment. */ }
+      if (excluded) reserve(excluded);
+      recovery.abandoned.push({ offset, digest: saved.digest });
+      return true;
     }
-    if (!isUtf8(bytes)) throw new Error(`Invalid UTF-8 journal record at byte ${offset}.`);
-    let event: unknown;
-    try { event = JSON.parse(text); } catch { throw new Error(`Malformed journal record at byte ${offset}.`); }
-    validateMemoryEvent(event);
-    if (ids.has(event.id)) throw new Error('Duplicate memory event identifier.');
-    ids.add(event.id);
+    let event: MemoryEvent;
+    try { event = parse(bytes); }
+    catch (error) {
+      // Syntax errors (including truncated UTF-8) are recoverable only at EOF.
+      if (unterminated && (error instanceof SyntaxError || !isUtf8(bytes))) return true;
+      if (error instanceof SyntaxError) throw new Error(`Malformed journal record at byte ${offset}.`);
+      throw error;
+    }
+    reserve(event);
     count++;
     visit(event);
+    if (unterminated) recovery.recovered.push({ offset, id: event.id });
+    return false;
   }
   try {
     for await (const chunk of file.createReadStream()) {
@@ -129,14 +159,16 @@ async function scan(dir: string, visit: (event: MemoryEvent) => void): Promise<S
       if (pending.length > MAX_EVENT_BYTES) throw new Error('Journal record exceeds size limit.');
     }
   } finally { await file.close(); }
-  return { count, ...(pending.length ? { tail: { offset, digest: hash(pending) } } : {}) };
+  const tail = pending.length ? { offset, digest: hash(pending), abandoned: await line(pending, true) } : undefined;
+  return { count, recovery, ...(tail ? { tail } : {}) };
 }
-export async function listMemory(root: string): Promise<{ events: MemoryEvent[]; incompleteTail: boolean }> {
+export async function listMemory(root: string): Promise<{ events: MemoryEvent[]; incompleteTail: boolean; recovery?: MemoryRecovery }> {
   const events: MemoryEvent[] = [];
   const result = await scan(await journalDir(root), (event) => events.push(event));
-  return { events, incompleteTail: !!result.tail };
+  return { events, incompleteTail: !!result.tail?.abandoned,
+    ...(result.recovery.recovered.length || result.recovery.abandoned.length ? { recovery: result.recovery } : {}) };
 }
-export async function appendMemory(root: string, event: MemoryEvent): Promise<void> {
+export async function appendMemory(root: string, event: MemoryEvent): Promise<MemoryRecovery> {
   // Freeze validated data before any asynchronous work by serializing and parsing it.
   const serialized = JSON.stringify(event);
   const saved: unknown = JSON.parse(serialized);
@@ -149,17 +181,23 @@ export async function appendMemory(root: string, event: MemoryEvent): Promise<vo
     if ((error as NodeJS.ErrnoException).code === 'EEXIST') throw new Error('Memory writer lock exists. If no writer is running, remove .contextbridge/journal/writer.lock and retry.');
     throw error;
   }
+  let owned: BigIntStats | undefined;
+  let failure: unknown;
+  let failed = false;
+  let recovery: MemoryRecovery = { recovered: [], abandoned: [] };
   try {
-    const result = await scan(dir, (existing) => {
-      if (existing.id === saved.id) throw new Error('Duplicate memory event identifier.');
+    owned = await lock.stat({ bigint: true });
+    const result = await scan(dir, () => {}, (id) => {
+      if (id === saved.id) throw new Error('Duplicate memory event identifier.');
     });
-    if (result.tail) {
+    recovery = result.recovery;
+    if (result.tail?.abandoned) {
       // Record only a hash and offset before sealing the interrupted tail. Never rewrite history.
+      if (!recovery.abandoned.some((item) => item.offset === result.tail!.offset)) recovery.abandoned.push({ offset: result.tail.offset, digest: result.tail.digest });
       const markerPath = join(dir, 'recovery', `${result.tail.offset}.json`);
-      await safeEntry(markerPath, false);
-      await writeJsonAtomic(markerPath, {
-        offset: result.tail.offset, digest: result.tail.digest,
-      });
+      if (!await safeEntry(markerPath, false)) {
+        await writeJsonAtomic(markerPath, { offset: result.tail.offset, digest: result.tail.digest });
+      }
       const marker = await open(markerPath, 'r+');
       try { await marker.sync(); } finally { await marker.close(); }
     }
@@ -167,7 +205,20 @@ export async function appendMemory(root: string, event: MemoryEvent): Promise<vo
     const file = await open(join(dir, 'events.jsonl'), 'a', 0o600);
     try { await file.writeFile(`${result.tail ? '\n' : ''}${serialized}\n`); await file.sync(); }
     finally { await file.close(); }
-  } finally { await lock.close(); await unlink(lockPath); }
+  } catch (error) { failed = true; failure = error; }
+  const cleanupErrors: unknown[] = [];
+  try { await lock.close(); } catch (error) { cleanupErrors.push(error); }
+  try {
+    const current = await lstat(lockPath, { bigint: true });
+    if (owned && current.isFile() && !current.isSymbolicLink() && current.dev === owned.dev && current.ino === owned.ino) await unlink(lockPath);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') cleanupErrors.push(error);
+  }
+  if (failed && !cleanupErrors.length) throw failure;
+  if (cleanupErrors.length) throw new AggregateError(failed ? [failure, ...cleanupErrors] : cleanupErrors,
+    failed && failure instanceof Error ? failure.message : 'Memory writer lock cleanup failed; the event may already be committed.',
+    failed ? { cause: failure } : undefined);
+  return recovery;
 }
 
 export async function selectCheckpointMemory(root: string): Promise<{ events: MemoryEvent[]; omitted: number; incompleteTail: boolean }> {
@@ -178,5 +229,5 @@ export async function selectCheckpointMemory(root: string): Promise<{ events: Me
     bytes += Buffer.byteLength(JSON.stringify(event));
     while (events.length > MAX_CHECKPOINT_MEMORY_EVENTS || bytes > MAX_CHECKPOINT_MEMORY_BYTES) bytes -= Buffer.byteLength(JSON.stringify(events.shift()!));
   });
-  return { events, omitted: result.count - events.length, incompleteTail: !!result.tail };
+  return { events, omitted: result.count - events.length, incompleteTail: !!result.tail?.abandoned };
 }

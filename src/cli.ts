@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { appendMemory, createMemoryEvent, listMemory } from './memory.ts';
-import type { MemoryEvent } from './memory.ts';
+import type { MemoryEvent, MemoryRecovery } from './memory.ts';
 import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -55,6 +55,11 @@ function option(args: string[], key: string, fallback?: string): string | undefi
 function commandVersion(cmd: string): string {
   const result = spawnSync(cmd, ['--version'], { encoding: 'utf8', timeout: 3_000 });
   return result.status === 0 ? (result.stdout || result.stderr).trim().split('\n')[0] : 'not available';
+}
+
+function reportRecovery(recovery?: MemoryRecovery): void {
+  for (const item of recovery?.recovered ?? []) console.error(`Recovered complete journal tail at byte ${item.offset}: ${item.id}.`);
+  for (const item of recovery?.abandoned ?? []) console.error(`Journal record at byte ${item.offset} excluded by recovery marker (SHA-256 ${item.digest}).`);
 }
 
 async function main(): Promise<void> {
@@ -118,11 +123,12 @@ async function main(): Promise<void> {
             ...(option(args, 'reference') !== undefined ? { reference: option(args, 'reference') } : {}) },
           ...(values(args, 'file').length ? { relatedFiles: values(args, 'file') } : {}),
         });
-        await appendMemory(root, event);
+        reportRecovery(await appendMemory(root, event));
         console.log(`Memory recorded (unverified): ${event.id}`);
       } else if (action === 'list') {
         const result = await listMemory(root);
         console.log(JSON.stringify(result.events, null, 2));
+        reportRecovery(result.recovery);
         if (result.incompleteTail) console.error('Incomplete journal tail ignored; the next add will seal it with a recovery marker.');
       } else throw new Error('Use memory add or memory list.');
       return;
