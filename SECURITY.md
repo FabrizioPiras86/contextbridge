@@ -8,7 +8,7 @@ Do not supply credentials, authentication tokens, customer data, or sensitive te
 
 ## Supported behavior
 
-The starter records Git metadata, manually supplied work-state text, and snapshot integrity digests. It does not collect raw conversations or source file contents automatically. It performs no network requests.
+The starter records Git metadata, manually supplied work-state text, and snapshot integrity digests. It does not collect raw conversations or source file contents automatically. ContextBridge itself performs no network requests. The explicit `next --agent codex` command launches Codex, which may contact its configured provider and read project files under its own permission settings. The verified checkpoint is passed as an initial user prompt, not privileged instructions; its text may be visible in local process arguments. The mutable handoff file is not trusted as launch input.
 
 ## Reporting
 

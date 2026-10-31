@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { initProject, loadConfig } from './config.ts';
 import { createCheckpoint, verifyLatest } from './snapshot.ts';
 import { storeDir } from './storage.ts';
+import { nextSession } from './next.ts';
 import type { Agent } from './types.ts';
 
 const HELP = `ContextBridge CLI (foundation preview)\n\n` +
@@ -15,12 +16,16 @@ const HELP = `ContextBridge CLI (foundation preview)\n\n` +
   `  checkpoint  Create a checkpoint using explicitly supplied work state\n` +
   `  verify      Verify the latest checkpoint checksum\n` +
   `  doctor      Check basic runtime prerequisites\n` +
-  `  next        Reserved: not implemented in the foundation preview\n` +
+  `  next        Start a fresh Codex session from the latest verified checkpoint\n` +
   `  run         Reserved: not implemented in the foundation preview\n\n` +
   `Examples:\n` +
   `  contextbridge init --agent both\n` +
   `  contextbridge checkpoint --objective "Implement authentication" --next-step "Write tests"\n` +
-  `  contextbridge verify\n`;
+  `  contextbridge verify\n` +
+  `  contextbridge next --agent codex [--project /path/to/project]\n\n` +
+  `next requires --agent codex and an installed Codex CLI on PATH.\n` +
+  `It runs interactively in the selected project (default: current directory).\n` +
+  `Claude handoff, automatic rollover, and token monitoring are not implemented.\n`;
 
 function values(args: string[], key: string): string[] {
   const result: string[] = [];
@@ -46,6 +51,10 @@ function commandVersion(cmd: string): string {
 
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
+  if (command === 'next' && (args.includes('--help') || args.includes('-h'))) {
+    console.log(HELP);
+    return;
+  }
   const root = resolve(option(args, 'project', process.cwd())!);
   switch (command) {
     case undefined:
@@ -69,7 +78,7 @@ async function main(): Promise<void> {
     case 'status': {
       const config = await loadConfig(root);
       console.log(`Agent: ${config.agent}`);
-      console.log(`Mode: ${config.mode} (configuration only; agent integrations pending)`);
+      console.log(`Mode: ${config.mode} (Codex assisted next available; token monitoring pending)`);
       console.log(`Thresholds: ${config.thresholds.warning}/${config.thresholds.handoff}/${config.thresholds.safety}% (not monitored yet)`);
       try {
         const snapshot = await verifyLatest(root);
@@ -108,10 +117,12 @@ async function main(): Promise<void> {
       console.log(`Git: ${commandVersion('git')}`);
       console.log(`Claude Code: ${commandVersion('claude')}`);
       console.log(`Codex: ${commandVersion('codex')}`);
-      console.log('Adapters, automatic rollover and token monitoring are not installed in this preview.');
+      console.log('Codex assisted next is available. Claude handoff, automatic rollover and token monitoring are not implemented.');
       return;
     }
     case 'next':
+      process.exitCode = await nextSession(root, option(args, 'agent'));
+      return;
     case 'run':
       throw new Error(`The '${command}' command is scheduled for a later milestone and is not implemented yet.`);
     default:

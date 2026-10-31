@@ -16,7 +16,7 @@ Long agent sessions can accumulate irrelevant history, verbose tool output, and 
 
 **Managed automatic mode:** Run an agent through a managed CLI frontend. The frontend controls the session lifecycle through supported APIs, monitors telemetry, and performs rollover at a safe turn boundary. New sessions must be started independently, not resumed with all prior conversation content.
 
-Automatic mode is a roadmap feature and is not implemented in v0.0.1.
+The preview implements user-invoked Codex assisted handoff through `next --agent codex`. Hooks, context-pressure warnings, and automatic mode remain roadmap features.
 
 ## 3. Architecture
 
@@ -55,7 +55,9 @@ Rollover coordinator ---> Memory engine
 - **Memory:** stable facts, goals, constraints, tasks, decisions, open issues, and evidence references. Facts have explicit provenance and confidence; source code is the authority for current code facts.
 - **Storage:** local, atomic snapshots with schema versioning, immutable identifiers, checksums, retention, and crash recovery.
 - **Adapters:** Claude and Codex integrations, implemented only against supported interfaces and validated versions.
-- **CLI:** independent entrypoint for initialization, diagnostics, checkpointing, verification, and future rollover orchestration.
+- **CLI:** independent entrypoint for initialization, diagnostics, checkpointing, verification, assisted Codex handoff, and future rollover orchestration.
+
+The first assisted path is `CLI -> nextSession -> verifyLatest -> renderSessionPrompt -> Codex adapter`. The adapter launches `codex [PROMPT]` with inherited terminal streams in the selected project directory, without resume/fork commands or settings overrides. Snapshot state remains provider-neutral and unchanged across launch success or failure. The prompt is compact JSON with provenance and an explicit untrusted-data boundary, limited to 24,000 UTF-8 bytes; oversized prompts fail before launch. This path waits for process exit but does not implement the automatic lifecycle state machine, startup acknowledgment, or token monitoring. A Claude Code adapter can reuse the verification and rendering path.
 
 ## 4. Handoff state and provenance
 
