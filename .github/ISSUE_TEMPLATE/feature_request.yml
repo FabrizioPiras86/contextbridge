@@ -1,0 +1,19 @@
+name: Feature request
+description: Suggest a new feature or agent integration.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What workflow is currently difficult?
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Expected behavior
+      description: Describe verifiable acceptance criteria.
+    validations:
+      required: true
