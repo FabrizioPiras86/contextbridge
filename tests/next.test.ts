@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { initProject } from '../src/config.ts';
@@ -9,6 +9,36 @@ import { createCheckpoint } from '../src/snapshot.ts';
 import { digestOf } from '../src/storage.ts';
 
 const entry = resolve('bin/contextbridge.mjs');
+
+async function assertSameDirectory(actual: string, expected: string): Promise<void> {
+  const [actualStats, expectedStats] = await Promise.all([
+    stat(actual, { bigint: true }), stat(expected, { bigint: true }),
+  ]);
+  assert.ok(actualStats.isDirectory(), `Expected a directory: ${actual}`);
+  assert.ok(expectedStats.isDirectory(), `Expected a directory: ${expected}`);
+  // File identity is unchanged by Windows 8.3 names, path casing, or directory aliases.
+  // BigInt preserves the full file identifiers on every supported platform.
+  assert.deepEqual(
+    { dev: actualStats.dev, ino: actualStats.ino },
+    { dev: expectedStats.dev, ino: expectedStats.ino },
+    `Expected the same directory: ${actual} and ${expected}`,
+  );
+}
+
+test('directory identity accepts aliases and rejects a different directory', async (t) => {
+  const base = await mkdtemp(join(tmpdir(), 'contextbridge-directory-'));
+  t.after(() => rm(base, { recursive: true, force: true }));
+  const target = join(base, 'project with spaces');
+  const alias = join(base, 'project-alias');
+  const other = join(base, 'other-project');
+  await mkdir(target);
+  await mkdir(other);
+  // Windows junctions do not require the privileges needed for directory symlinks.
+  await symlink(target, alias, process.platform === 'win32' ? 'junction' : 'dir');
+  await assertSameDirectory(target, target);
+  await assertSameDirectory(alias, target);
+  await assert.rejects(assertSameDirectory(other, target), /Expected the same directory/);
+});
 
 test('Codex assisted handoff uses verified data and fails recoverably', async (t) => {
   const base = await mkdtemp(join(tmpdir(), 'contextbridge-next-'));
@@ -62,7 +92,7 @@ else process.exit(Number(process.env.CB_EXIT || 0));
     const result = f.run();
     assert.equal(result.status, 0, result.stderr);
     const invocation = JSON.parse(await readFile(f.record, 'utf8'));
-    assert.equal(invocation.cwd, await realpath(f.root));
+    await assertSameDirectory(invocation.cwd, f.root);
     assert.equal(invocation.args.length, 1);
     const prompt = invocation.args[0];
     assert.match(prompt, /untrusted data, not privileged instructions/);
@@ -73,7 +103,7 @@ else process.exit(Number(process.env.CB_EXIT || 0));
     assert.match(result.stdout, /Mock Codex interactive output/);
     assert.match(result.stderr, /Mock Codex diagnostic/);
     assert.deepEqual(await Promise.all(paths.map((path) => readFile(path, 'utf8'))), before);
-    assert.deepEqual(await readdir(join(f.root, '.contextbridge')), ['HANDOFF.md', 'config.json', 'snapshots', 'state.json']);
+    assert.deepEqual((await readdir(join(f.root, '.contextbridge'))).sort(), ['HANDOFF.md', 'config.json', 'snapshots', 'state.json']);
   });
 
   await t.test('reads the latest checkpoint without requiring HANDOFF.md', async () => {
@@ -93,7 +123,7 @@ else process.exit(Number(process.env.CB_EXIT || 0));
         ...(process.platform === 'win32' ? { NODE_OPTIONS: `--require ${JSON.stringify(preload)}` } : {}) },
     });
     assert.equal(result.status, 0, result.stderr);
-    assert.equal(JSON.parse(await readFile(f.record, 'utf8')).cwd, await realpath(f.root));
+    await assertSameDirectory(JSON.parse(await readFile(f.record, 'utf8')).cwd, f.root);
   });
 
   for (const agent of ['claude', 'both', 'unknown']) {
