@@ -70,7 +70,7 @@ Every relevant field should have one of these provenance classes:
 - `test-verified`: a test command and result with date and execution environment recorded.
 - `agent-reported`: a claim made by an agent that must not be treated as independently verified.
 
-The foundation preview only supports user-supplied work fields and Git metadata; the full provenance model is M1 work.
+The preview supports user-supplied work fields, Git metadata, and structured journal events with user-supplied or agent-reported provenance. Structured events are always unverified. Evidence-backed verification remains future work.
 
 ### Snapshot example
 
@@ -116,7 +116,7 @@ ACTIVE
   -> ACTIVE_NEW
 ```
 
-All writes must be atomic. The snapshot pointer is committed only after a complete snapshot and handoff exist. The old session remains available if the new one fails to initialize. No forced rollover during active tool operations, provider approval prompts, or uncommitted local writing steps. Git actions that alter history are never performed implicitly.
+Snapshot replacements must be atomic. Journal writes use append-only records, exclusive writer locking, and interrupted-tail recovery as described below. The snapshot pointer is committed only after a complete snapshot and handoff exist. The old session remains available if the new one fails to initialize. No forced rollover during active tool operations, provider approval prompts, or uncommitted local writing steps. Git actions that alter history are never performed implicitly.
 
 ## 6. Token telemetry
 
@@ -150,3 +150,44 @@ See [ROADMAP.md](ROADMAP.md). Ship local snapshot correctness first, then assist
 ## 11. Implementation notes
 
 This repository intentionally begins with a zero-external-dependency foundation CLI using Node's built-in TypeScript stripping, available under an experimental flag in the minimum supported Node version. Before publishing a stable npm release, migrate to a conventional compiled TypeScript package, lock the toolchain, and test a built distribution artifact on Linux, macOS, and Windows.
+
+## 12. M1.1 incremental memory engine
+
+`src/memory.ts` owns event creation, strict schema/privacy validation, journal append/retrieval, and bounded checkpoint selection. It imports no provider adapter. `MemoryInput`, `createMemoryEvent`, and `appendMemory` form the extension boundary for future explicit agent imports and supported hooks; no hooks are installed and no automatic capture runs.
+
+The version-1 event contract is:
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "mem_7e6b75f0-54a9-4f94-8f34-902c5e850a78",
+  "timestamp": "2026-10-31T09:00:00.000Z",
+  "type": "decision",
+  "content": "Use MySQL",
+  "source": { "kind": "user-supplied", "reference": "Explicit project decision" },
+  "verification": "unverified",
+  "relatedFiles": ["src/database.ts"]
+}
+```
+
+Types are `decision`, `task`, `blocker`, and `note`. Source kinds are `user-supplied` and `agent-reported`; `reference` and `relatedFiles` are optional. UUIDs identify events independently of timestamps and providers. Append order is canonical; timestamps are recorded metadata, not trusted ordering or evidence of truth. Unknown fields and schema versions fail closed. Validation applies both before saving and during retrieval, including snapshot verification.
+
+Storage is `.contextbridge/journal/events.jsonl` with UTF-8 JSON and a terminating LF per committed event. New journal directories/files request owner-only permissions where supported; Windows permissions follow the host ACL. Scanning uses bounded line buffers (16,384 bytes per record), validates all complete records (including a parseable EOF tail), and tracks IDs to reject duplicates. Appending takes an exclusive `wx` lock and rescans before writing, preserving the existing byte prefix. Storage grows indefinitely in M1.1; scans and duplicate-ID tracking are linear in history size. No dependencies, network clients, source file reads, or provider APIs are introduced.
+
+Event commit and recovery guarantees:
+
+- A normal append writes the validated event and LF, syncs the journal, and releases its writer lock before returning success. The journal's existing byte prefix is preserved. A failure does not prove that the event was not stored: write, sync, or cleanup may fail after some or all bytes reached the file. Reuse the same event ID on retry to detect duplicates; inspect the journal before retrying a CLI add, which generates a new ID.
+- At EOF, complete UTF-8 JSON that passes event validation and duplicate checks is included in reads and checkpoint selection immediately, even without LF. `incompleteTail` is false for such an event. Reads report it as a recovered tail without changing storage. The next append seals it with LF before writing the new event, without creating an exclusion marker. Such recovery does not establish that the interrupted original call returned success or synced its bytes.
+- An unterminated fragment that cannot be parsed as UTF-8 JSON is excluded, with `incompleteTail: true`. This includes truncated multibyte characters. Syntax alone cannot reliably distinguish truncation from other malformed JSON at EOF; both use the fragment recovery path. Parseable JSON with an invalid event schema or privacy violation fails closed instead. Oversized records, duplicate IDs, and malformed newline-terminated records also fail closed.
+- Before sealing an excluded fragment, write and sync `journal/recovery/<byte-offset>.json` containing its offset and SHA-256 digest. Then append LF followed by the new event and LF, and sync the journal. An existing marker is checked against both offset and raw bytes before any exclusion; a mismatch fails closed. Existing markers are not rewritten. Legacy markers remain authoritative even if their bytes describe a valid event. Valid IDs from marker-excluded events remain reserved, preventing reuse or duplicate recovery.
+- A crash before marker publication leaves an ordinary EOF tail. A crash after publication but before LF leaves a marker-backed EOF fragment. A crash after LF leaves a marker-backed excluded line. Repeating recovery at any of these boundaries produces the same interpretation. A partial subsequent event is recovered independently at its own offset; a complete subsequent event is preserved. Operators must confirm no writer is running before removing a stale writer lock to resume writes.
+- `listMemory` exposes optional `recovery: { recovered: [{ offset, id }], abandoned: [{ offset, digest }] }`; `appendMemory` returns the same report. Recovered entries describe complete unmarked EOF events; abandoned entries describe all marker-backed exclusions, including legacy ones and newly sealed fragments. CLI list/add print these reports to stderr while preserving stdout formats. Exclusions remain reported on later reads and appends. Checkpoint payloads retain their existing schema and include valid recovered events; recovery history remains in the journal and markers rather than the snapshot.
+- Lock cleanup attempts close and ownership-checked unlink independently, using the acquired descriptor's device/inode identity. A replacement lock is preserved. If append and cleanup both fail, an `AggregateError` retains the append error as `cause` and lists all errors. If ownership cannot be established, leave the lock for operator recovery. Identity checks are not protection against hostile concurrent path replacement between checking and unlinking.
+
+Recovery markers are integrity metadata, not authenticity proofs. Successful file sync is not a full power-loss transaction protocol: directory entries and marker publication are not transactionally committed with journal writes. Readers do not acquire the writer lock and may observe an in-progress EOF tail; a checkpoint reflects the bytes observed during its scan. Recovery does not guarantee exactly-once CLI commands or identify arbitrary event IDs inside invalid fragments. Old snapshots are never rewritten.
+
+Related file paths use a portable relative syntax: forward slashes, no empty/dot/traversal components, drive letters, UNC paths, Windows device names, alternate streams, control characters, or nonportable reserved characters. Common sensitive paths are blocked. These references never authorize file reads. Journal components reject links and unusual file types; checks are intended for local accidental misuse, not a hostile concurrent filesystem actor. Common credential patterns are rejected in content and provenance references, with generic errors that do not echo secrets. Scanning is deliberately heuristic, not a guarantee that arbitrary user text is safe to disclose.
+
+New schema-1 snapshots optionally carry `memory: { events, omitted, incompleteTail }`. Legacy snapshots omit it and retain their original digest and validation path. Selection uses the latest contiguous suffix, capped at 20 events and 12,000 bytes of serialized event payload, in append order. Older records remain in the journal. Memory is included in the snapshot digest and both generated handoffs, as untrusted recorded claims rather than verified decisions or test results. No migrations or checkpoint rewrites occur. Semantic retrieval, evidence verification, retention, and snapshot schema migration remain future work.
+
+The test suite covers portable Windows/POSIX path rules on every host and uses platform-compatible temporary directories and directory links. The existing GitHub Actions matrix runs the suite on macOS, Linux, and Windows with Node 22; local execution alone does not establish results on other operating systems.

@@ -4,7 +4,7 @@
 
 ContextBridge is an open-source project intended to help developers preserve actionable project context when moving between fresh AI coding sessions. Its first assisted integration supports **OpenAI Codex**; a **Claude Code** adapter is planned.
 
-> **Project status: foundation preview (v0.0.1).** The CLI can initialize local memory, create manually annotated checkpoints, generate a compact handoff file, and verify snapshot checksums. It can start a fresh interactive Codex CLI session from a verified checkpoint with `next --agent codex`. It **does not yet monitor agent token usage, install hooks, extract a full conversation, or perform automatic rollover**. Claude Code handoff and managed integrations remain roadmap items.
+> **Project status: foundation preview (v0.0.1).** The CLI supports an append-only structured project memory journal. It can initialize local memory, create manually annotated checkpoints, generate a compact handoff file, and verify snapshot checksums. It can start a fresh interactive Codex CLI session from a verified checkpoint with `next --agent codex`. It **does not yet monitor agent token usage, install hooks, extract a full conversation, or perform automatic rollover**. Claude Code handoff and managed integrations remain roadmap items.
 
 ## Design principles
 
@@ -55,10 +55,37 @@ The tracked project receives `.contextbridge/config.json`, `.contextbridge/state
 | `init` | Implemented | Create local project config and ignore rules |
 | `status` | Implemented | Show configuration and latest verified checkpoint |
 | `checkpoint` | Implemented | Create snapshot from explicit work-state arguments and Git metadata |
+| `memory add` / `memory list` | Implemented | Append and retrieve local structured, unverified memory |
 | `verify` | Implemented | Check latest snapshot content integrity (SHA-256) |
 | `doctor` | Implemented | Detect local Node, Git and agent CLI executables |
 | `next --agent codex` | Implemented | Start a fresh interactive Codex session from the latest verified checkpoint |
 | `run` | Not implemented | Manage an agent session with automatic rollover |
+
+## Incremental project memory
+
+After `init`, record explicit decisions, tasks, blockers, or notes:
+
+```bash
+contextbridge memory add --type decision --text "Use MySQL"
+contextbridge memory add --type task --text "Review the database migration" --file src/database.ts
+contextbridge memory add --type note --text "Agent suggested a connection pool" \
+  --source agent-reported --reference "Manual summary of an agent report"
+contextbridge memory list
+```
+
+Use `node bin/contextbridge.mjs` in place of `contextbridge` when running from this checkout. All commands accept `--project /path/to/project`. `--file` may be repeated. `memory list` prints a JSON array in append order, which may differ from timestamp order. Text is preserved without translation or trimming.
+
+Events live in `.contextbridge/journal/events.jsonl`, excluded from Git by `init`. Each event contains a UUID, UTC timestamp, schema version, type, content, source, optional related files, and `verification: "unverified"`. Sources are `user-supplied` (default) or `agent-reported`, with an optional reference. Recording information never verifies its truth. This provider-neutral format can be used by future adapters; hooks, automatic capture, and token monitoring are not implemented.
+
+Content is limited to 8,192 UTF-8 bytes; serialized events to 16,384 bytes. Source references are limited to 512 bytes and related paths to 32 portable project-relative paths. Unknown fields, invalid types, duplicates, unsafe paths, sensitive file names, and common credential patterns are rejected. Paths are metadata only: ContextBridge does not read their contents. Secret detection is heuristic and can miss credentials or reject innocent text; review content and references before saving. No redaction or translation silently changes accepted text. No network requests, external AI APIs, or telemetry are used by memory operations.
+
+New checkpoints automatically include the latest contiguous suffix of at most 20 events within a 12,000-byte event payload budget. They record the omitted event count and any incomplete tail. This initial relevance policy uses recency; semantic and file-based retrieval are future work. Memory is retained separately from explicit checkpoint decisions and always labeled as unverified in handoffs. Existing schema-1 snapshots without memory remain readable and unchanged. The existing overall handoff prompt limit still applies.
+
+Normal appends write one validated UTF-8 JSON event and LF, then sync the journal before reporting success. A complete, valid final event without LF is recoverable: reads and checkpoints include it, and the next add appends LF before the new event. No existing journal bytes are rewritten. An EOF fragment that cannot be parsed as UTF-8 JSON is excluded and reported as an incomplete tail. Before sealing such a fragment, add writes and syncs a hash-and-offset recovery marker under `journal/recovery/`. Complete JSON with an invalid schema, oversized records (including tails), duplicate IDs, and malformed newline-terminated records fail closed.
+
+`memory list` and `memory add` report recovered tails and marker-backed exclusions on stderr, including byte offsets; event JSON on stdout remains unchanged. The programmatic `listMemory` result has optional `recovery: { recovered, abandoned }` metadata, and `appendMemory` returns that report. Existing markers remain authoritative even for valid JSON and are never silently reversed: preserve them alongside the journal. Valid event IDs in excluded records remain reserved. Reads never create markers or change files. See [the exact recovery guarantees](docs/BLUEPRINT.md#12-m11-incremental-memory-engine). Back up the journal before investigating corruption.
+
+Concurrent writers fail safely using `journal/writer.lock`. After a process crash, first confirm no ContextBridge writer is running, then remove only `.contextbridge/journal/writer.lock` and retry. Readers remain available while the lock exists. Cleanup attempts removal even if closing the lock fails, and checks file identity to preserve a replacement lock. If both append and cleanup fail, an aggregate error retains the append error as its cause. A reported failure can occur after event bytes were written; inspect memory before retrying and reuse the same event ID to detect an already recorded event. Successful appends sync the event file; this is process-interruption recovery, not a transactional guarantee against hardware failure or power loss. Local storage checks reject symlinked journal components and hard-linked files; they do not protect against an attacker concurrently replacing files in a writable project. Append validation scans history for duplicate IDs, so appends avoid history rewrites but currently take time proportional to journal length. Retention and indexing remain future work.
 
 ## Assisted Codex handoff
 

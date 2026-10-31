@@ -1,3 +1,5 @@
+import type { MemoryEvent } from './memory.ts';
+
 export type Agent = 'claude' | 'codex' | 'both';
 export type Mode = 'assisted' | 'auto';
 
@@ -10,6 +12,7 @@ export interface Config {
 }
 
 export interface SnapshotPayload {
+  memory?: { events: MemoryEvent[]; omitted: number; incompleteTail: boolean };
   schemaVersion: 1;
   id: string;
   createdAt: string;
