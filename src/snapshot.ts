@@ -1,3 +1,4 @@
+import { MAX_CHECKPOINT_MEMORY_BYTES, MAX_CHECKPOINT_MEMORY_EVENTS, selectCheckpointMemory, validateMemoryEvent } from './memory.ts';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { loadConfig } from './config.ts';
@@ -22,6 +23,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function validatePayload(snapshot: Snapshot): void {
+  if (snapshot.memory !== undefined) {
+    const memory = snapshot.memory;
+    if (!isRecord(memory) || !Array.isArray(memory.events) || memory.events.length > MAX_CHECKPOINT_MEMORY_EVENTS ||
+        !Number.isSafeInteger(memory.omitted) || memory.omitted < 0 || typeof memory.incompleteTail !== 'boolean' ||
+        memory.events.reduce((bytes, event) => bytes + Buffer.byteLength(JSON.stringify(event)), 0) > MAX_CHECKPOINT_MEMORY_BYTES) throw new Error('Invalid snapshot memory.');
+    const ids = new Set<string>();
+    for (const event of memory.events) {
+      validateMemoryEvent(event);
+      if (ids.has(event.id)) throw new Error('Duplicate snapshot memory identifier.');
+      ids.add(event.id);
+    }
+  }
   const { project, work, provenance } = snapshot;
   const strings = (value: unknown): boolean => Array.isArray(value) && value.every((item) => typeof item === 'string');
   if (typeof snapshot.createdAt !== 'string' || !Number.isFinite(Date.parse(snapshot.createdAt)) ||
@@ -45,9 +58,11 @@ export async function createCheckpoint(root: string, input: CheckpointInput): Pr
   if (!input.objective.trim() || !input.nextStep.trim()) {
     throw new Error('A non-empty objective and next step are required.');
   }
+  const memory = await selectCheckpointMemory(root);
   const git = getGitInfo(root);
   const payload: SnapshotPayload = {
     schemaVersion: 1,
+    ...(memory.events.length || memory.omitted || memory.incompleteTail ? { memory } : {}),
     id: snapshotName(),
     createdAt: new Date().toISOString(),
     project: {

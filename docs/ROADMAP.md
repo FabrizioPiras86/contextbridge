@@ -12,9 +12,21 @@
 
 ## M1 — Memory engine
 
+### M1.1 — Incremental memory foundation (implemented)
+
+- [x] Provider-neutral versioned events for decisions, tasks, blockers, and notes.
+- [x] Append-only local JSONL journal and `memory add` / `memory list`.
+- [x] Validation, duplicate detection, bounded records, writer locking, and interrupted-tail recovery.
+- [x] Explicit unverified provenance, portable path rules, and heuristic secret rejection.
+- [x] Bounded recent memory in checkpoints with legacy snapshot compatibility.
+- [x] Recovery, privacy, CLI, compatibility, and portable filesystem tests in the existing OS CI matrix.
+
+### Remaining M1 work
+
+
 - [ ] Structured tasks, decisions, constraints, evidence, and provenance.
-- [ ] Append-only event journal, crash recovery, and retention policy.
-- [ ] Secret scanning and robust path/file allowlists.
+- [ ] Retention policy and journal indexing (append-only journal and process-crash recovery implemented in M1.1).
+- [ ] Expanded secret scanning and configurable file allowlists (heuristic rejection and portable path validation implemented in M1.1).
 - [ ] Snapshot migrations, backup, and bounded handoff token budgets.
 - [ ] Incremental checkpoint triggers and data-redaction controls.
 - [ ] Retrieval of selected older evidence without full history injection.

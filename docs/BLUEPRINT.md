@@ -70,7 +70,7 @@ Every relevant field should have one of these provenance classes:
 - `test-verified`: a test command and result with date and execution environment recorded.
 - `agent-reported`: a claim made by an agent that must not be treated as independently verified.
 
-The foundation preview only supports user-supplied work fields and Git metadata; the full provenance model is M1 work.
+The preview supports user-supplied work fields, Git metadata, and structured journal events with user-supplied or agent-reported provenance. Structured events are always unverified. Evidence-backed verification remains future work.
 
 ### Snapshot example
 
@@ -116,7 +116,7 @@ ACTIVE
   -> ACTIVE_NEW
 ```
 
-All writes must be atomic. The snapshot pointer is committed only after a complete snapshot and handoff exist. The old session remains available if the new one fails to initialize. No forced rollover during active tool operations, provider approval prompts, or uncommitted local writing steps. Git actions that alter history are never performed implicitly.
+Snapshot replacements must be atomic. Journal writes use append-only records, exclusive writer locking, and interrupted-tail recovery as described below. The snapshot pointer is committed only after a complete snapshot and handoff exist. The old session remains available if the new one fails to initialize. No forced rollover during active tool operations, provider approval prompts, or uncommitted local writing steps. Git actions that alter history are never performed implicitly.
 
 ## 6. Token telemetry
 
@@ -150,3 +150,34 @@ See [ROADMAP.md](ROADMAP.md). Ship local snapshot correctness first, then assist
 ## 11. Implementation notes
 
 This repository intentionally begins with a zero-external-dependency foundation CLI using Node's built-in TypeScript stripping, available under an experimental flag in the minimum supported Node version. Before publishing a stable npm release, migrate to a conventional compiled TypeScript package, lock the toolchain, and test a built distribution artifact on Linux, macOS, and Windows.
+
+## 12. M1.1 incremental memory engine
+
+`src/memory.ts` owns event creation, strict schema/privacy validation, journal append/retrieval, and bounded checkpoint selection. It imports no provider adapter. `MemoryInput`, `createMemoryEvent`, and `appendMemory` form the extension boundary for future explicit agent imports and supported hooks; no hooks are installed and no automatic capture runs.
+
+The version-1 event contract is:
+
+```json
+{
+  "schemaVersion": 1,
+  "id": "mem_7e6b75f0-54a9-4f94-8f34-902c5e850a78",
+  "timestamp": "2026-10-31T09:00:00.000Z",
+  "type": "decision",
+  "content": "Use MySQL",
+  "source": { "kind": "user-supplied", "reference": "Explicit project decision" },
+  "verification": "unverified",
+  "relatedFiles": ["src/database.ts"]
+}
+```
+
+Types are `decision`, `task`, `blocker`, and `note`. Source kinds are `user-supplied` and `agent-reported`; `reference` and `relatedFiles` are optional. UUIDs identify events independently of timestamps and providers. Append order is canonical; timestamps are recorded metadata, not trusted ordering or evidence of truth. Unknown fields and schema versions fail closed. Validation applies both before saving and during retrieval, including snapshot verification.
+
+Storage is `.contextbridge/journal/events.jsonl` with UTF-8 JSON and a terminating LF per committed event. New journal directories/files request owner-only permissions where supported; Windows permissions follow the host ACL. Scanning uses bounded line buffers (16,384 bytes per record), validates all complete records, and tracks IDs to reject duplicates. Appending takes an exclusive `wx` lock and rescans before writing, preserving the existing byte prefix. Storage grows indefinitely in M1.1; scans and duplicate-ID tracking are linear in history size. No dependencies, network clients, source file reads, or provider APIs are introduced.
+
+A final unterminated line is an uncommitted tail, excluded from results and reported explicitly. Before appending after an interruption, write and sync `journal/recovery/<byte-offset>.json` containing only its offset and digest, then append LF followed by the new record and LF, and sync the journal. Future scans skip only a record matching that marker's offset and digest. A crash before sealing leaves an incomplete tail; a crash after sealing leaves a marker-backed excluded record. Repeated interruptions can create additional markers without altering previous journal bytes. A remaining writer lock requires operator confirmation that no writer is running before manual removal. Complete malformed records, oversized tails, duplicate identifiers, and mismatched markers fail closed. Recovery markers are integrity metadata, not authenticity proofs. File and directory sync is not a full power-loss transaction protocol.
+
+Related file paths use a portable relative syntax: forward slashes, no empty/dot/traversal components, drive letters, UNC paths, Windows device names, alternate streams, control characters, or nonportable reserved characters. Common sensitive paths are blocked. These references never authorize file reads. Journal components reject links and unusual file types; checks are intended for local accidental misuse, not a hostile concurrent filesystem actor. Common credential patterns are rejected in content and provenance references, with generic errors that do not echo secrets. Scanning is deliberately heuristic, not a guarantee that arbitrary user text is safe to disclose.
+
+New schema-1 snapshots optionally carry `memory: { events, omitted, incompleteTail }`. Legacy snapshots omit it and retain their original digest and validation path. Selection uses the latest contiguous suffix, capped at 20 events and 12,000 bytes of serialized event payload, in append order. Older records remain in the journal. Memory is included in the snapshot digest and both generated handoffs, as untrusted recorded claims rather than verified decisions or test results. No migrations or checkpoint rewrites occur. Semantic retrieval, evidence verification, retention, and snapshot schema migration remain future work.
+
+The test suite covers portable Windows/POSIX path rules on every host and uses platform-compatible temporary directories and directory links. The existing GitHub Actions matrix runs the suite on macOS, Linux, and Windows with Node 22; local execution alone does not establish results on other operating systems.

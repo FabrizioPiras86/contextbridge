@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+import { appendMemory, createMemoryEvent, listMemory } from './memory.ts';
+import type { MemoryEvent } from './memory.ts';
 import { spawnSync } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
@@ -14,6 +16,7 @@ const HELP = `ContextBridge CLI (foundation preview)\n\n` +
   `  init        Initialize local project memory\n` +
   `  status      Show configuration and latest checkpoint\n` +
   `  checkpoint  Create a checkpoint using explicitly supplied work state\n` +
+  `  memory      Add or list local, unverified project memory\n` +
   `  verify      Verify the latest checkpoint checksum\n` +
   `  doctor      Check basic runtime prerequisites\n` +
   `  next        Start a fresh Codex session from the latest verified checkpoint\n` +
@@ -23,6 +26,11 @@ const HELP = `ContextBridge CLI (foundation preview)\n\n` +
   `  contextbridge checkpoint --objective "Implement authentication" --next-step "Write tests"\n` +
   `  contextbridge verify\n` +
   `  contextbridge next --agent codex [--project /path/to/project]\n\n` +
+  `Memory: contextbridge memory add --type decision --text "Use MySQL"\n` +
+  `        contextbridge memory list [--project /path/to/project]\n` +
+  `add supports --source user-supplied|agent-reported (default: user-supplied),\n` +
+  `--reference "source description", and repeated --file project/relative/path.\n` +
+  `Records are local, unverified claims. Potential secrets and unsafe paths are rejected.\n` +
   `next requires --agent codex and an installed Codex CLI on PATH.\n` +
   `It runs interactively in the selected project (default: current directory).\n` +
   `Claude handoff, automatic rollover, and token monitoring are not implemented.\n`;
@@ -51,7 +59,7 @@ function commandVersion(cmd: string): string {
 
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
-  if (command === 'next' && (args.includes('--help') || args.includes('-h'))) {
+  if (['next', 'memory'].includes(command) && (args.includes('--help') || args.includes('-h'))) {
     console.log(HELP);
     return;
   }
@@ -94,6 +102,29 @@ async function main(): Promise<void> {
         }
         console.log('Latest snapshot: none');
       }
+      return;
+    }
+    case 'memory': {
+      const action = args[0];
+      const allowed = action === 'add' ? ['type', 'text', 'source', 'reference', 'file', 'project'] : ['project'];
+      for (let i = 1; i < args.length; i += 2) {
+        if (!allowed.includes(args[i].slice(2)) || !args[i].startsWith('--')) throw new Error('Unknown memory option. Use memory --help.');
+        values(args, args[i].slice(2));
+      }
+      if (action === 'add') {
+        const event = createMemoryEvent({
+          type: option(args, 'type') as MemoryEvent['type'], content: option(args, 'text')!,
+          source: { kind: option(args, 'source', 'user-supplied') as MemoryEvent['source']['kind'],
+            ...(option(args, 'reference') !== undefined ? { reference: option(args, 'reference') } : {}) },
+          ...(values(args, 'file').length ? { relatedFiles: values(args, 'file') } : {}),
+        });
+        await appendMemory(root, event);
+        console.log(`Memory recorded (unverified): ${event.id}`);
+      } else if (action === 'list') {
+        const result = await listMemory(root);
+        console.log(JSON.stringify(result.events, null, 2));
+        if (result.incompleteTail) console.error('Incomplete journal tail ignored; the next add will seal it with a recovery marker.');
+      } else throw new Error('Use memory add or memory list.');
       return;
     }
     case 'checkpoint': {

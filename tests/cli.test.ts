@@ -40,3 +40,24 @@ test('CLI init, checkpoint, verify and status work end to end', async () => {
     await rm(root, { recursive: true, force: true });
   }
 });
+
+test('CLI memory add and list preserve text and reject invalid input', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'contextbridge-memory-cli-'));
+  try {
+    assert.equal(cli(['init', '--project', root]).status, 0);
+    assert.equal(cli(['memory', '--help']).status, 0);
+    const added = cli(['memory', 'add', '--project', root, '--type', 'decision', '--text', 'Use MySQL', '--file', 'src/db.ts']);
+    assert.equal(added.status, 0, added.stderr);
+    assert.match(added.stdout, /unverified/);
+    const listed = cli(['memory', 'list', '--project', root]);
+    assert.equal(listed.status, 0, listed.stderr);
+    const [event] = JSON.parse(listed.stdout);
+    assert.equal(event.content, 'Use MySQL');
+    assert.equal(event.source.kind, 'user-supplied');
+    for (const args of [[], ['--type', 'fact', '--text', 'Claim'], ['--type', 'note'], ['--type', 'note', '--text', 'password=hidden'],
+      ['--type', 'note', '--text', 'Text', '--file', '../outside'], ['--unknown', 'value']]) {
+      assert.equal(cli(['memory', 'add', '--project', root, ...args]).status, 1);
+    }
+    assert.equal(JSON.parse(cli(['memory', 'list', '--project', root]).stdout).length, 1);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
