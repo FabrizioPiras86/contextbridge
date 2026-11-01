@@ -17,3 +17,8 @@ Until the public repository and security-contact process are established, do not
 ## Mock managed process boundary
 
 Real managed App Server execution remains disabled. The POSIX test transport owns only its newly created child/group, with bounded cleanup and no persisted PID authority. It cannot contain descendants that leave the group or guarantee cleanup after parent hard failure. Numeric PID/group reuse remains a residual race; no signaling is authorized after observed leader exit. Windows fails before spawn pending tested native containment. See [the containment report](docs/M2_2B_2_REPORT.md). No raw process output is persisted and no process-name targeting is used.
+
+
+## Mock runtime policy boundary
+
+Managed mock admission validates pinned config/requirements responses before thread creation and explicit effective thread sandbox/network/approval settings before ready. Independent test-harness isolation assertions are required for unsupported properties and never establish real-runtime safety. Missing or inconsistent evidence blocks admission; sensitive configuration is discarded without logging or persistence. Post-handshake checks cannot prevent startup side effects. Every policy assessment retains production eligibility disabled. See [M2.2b.3](docs/M2_2B_3_REPORT.md).

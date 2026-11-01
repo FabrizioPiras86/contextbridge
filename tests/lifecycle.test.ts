@@ -1,3 +1,4 @@
+import { mockEvidence } from './fixtures/managed/evidence.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, readFile, readdir, rm, writeFile, symlink, link } from 'node:fs/promises';
@@ -28,7 +29,7 @@ async function fixture(t) {
   return { root, path, dir: join(root, '.contextbridge/telemetry'),
     capture(mode = 'normal', audit = false) {
       const rpc = new ManagedTransport(process.execPath, [mock, mode, ...(audit ? [path, join(root, 'turn-marker')] : [])], root);
-      const capture = new ManagedCapture(rpc, root); captures.push(capture); return capture;
+      const capture = new ManagedCapture(rpc, root, mockEvidence); captures.push(capture); return capture;
     } };
 }
 function acquisition(id = 'acquisition'): LifecycleRecord {
@@ -69,7 +70,7 @@ for (const obstruction of ['writer.lock', 'pending.json', 'corruption']) test(`f
   if (obstruction === 'corruption') await writeFile(f.path, '{');
   else await writeFile(join(f.dir, obstruction), canary);
   const before = await readFile(f.path);
-  await assert.rejects(capture.sendOneTurn(Buffer.from(canary), true), /inspection/);
+  await assert.rejects(capture.sendOneTurn(Buffer.from(canary), true), { message: 'Managed persistence failed; inspect committed storage. No retry is authorized.' });
   await assert.rejects(capture.flush(), /persistence failed/);
   await assert.rejects(capture.sendOneTurn(Buffer.from('retry'), true));
   await assert.rejects(readFile(join(f.root, 'turn-marker')), { code: 'ENOENT' });
@@ -80,7 +81,7 @@ test('acquisition persistence failure prevents initialization requests', posix, 
   const f = await fixture(t);
   await save(f.root, acquisition()); await writeFile(join(f.dir, 'writer.lock'), '');
   const before = await readFile(f.path); const capture = f.capture('normal', true);
-  await assert.rejects(capture.initialize(true, f.root), /initialization failed/);
+  await assert.rejects(capture.initialize(true, f.root), { message: 'Managed persistence failed; inspect committed storage. No retry is authorized.' });
   assert.deepEqual(await readFile(f.path), before);
   await assert.rejects(readFile(join(f.root, 'turn-marker')), { code: 'ENOENT' });
 });

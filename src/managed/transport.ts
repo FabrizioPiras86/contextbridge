@@ -84,9 +84,11 @@ export class ManagedTransport {
     return this.#request('turn/start', params);
   }
   #request(method: string, params: unknown): Promise<unknown> {
-    if (!['initialize', 'thread/start', 'turn/start', 'turn/interrupt', 'account/read'].includes(method) ||
+    if (!['initialize', 'thread/start', 'turn/start', 'turn/interrupt', 'account/read', 'config/read', 'configRequirements/read'].includes(method) ||
         this.#closed || this.#blocked || this.#pending.size >= PENDING_LIMIT) return Promise.reject(failure());
     if (method === 'account/read' && (!object(params) || !onlyKeys(params, ['refreshToken']) || params.refreshToken !== false)) return Promise.reject(failure());
+    if (method === 'config/read' && (!object(params) || !onlyKeys(params, ['cwd', 'includeLayers']) || typeof params.cwd !== 'string' || params.includeLayers !== true)) return Promise.reject(failure());
+    if (method === 'configRequirements/read' && params !== null) return Promise.reject(failure());
     const id = ++this.#next;
     if (!Number.isSafeInteger(id)) return Promise.reject(failure());
     return new Promise((resolve, reject) => {

@@ -8,7 +8,8 @@
 - [x] English-only repository assets and contribution policy.
 - [x] Node built-in unit and CLI tests.
 - [ ] TypeScript package build and dependency lockfile for stable releases.
-- [ ] GitHub publication and CI run on all supported platforms.
+- [ ] GitHub publication.
+- [x] Baseline macOS/Linux/Windows CI (completed according to the supplied M2.2b.3 request).
 
 ## M1 — Memory engine
 
@@ -66,7 +67,7 @@
 - [ ] Managed continuous App Server event capture with verified lifecycle and observation metadata.
 - [ ] A documented, justified measurement of active context occupancy.
 - [ ] Supported continuous telemetry integration for interactive Codex CLI and existing VS Code sessions.
-- [ ] Execute the expanded test suite in the macOS/Linux/Windows CI matrix (local macOS execution is separate evidence).
+- [x] Baseline M2.2b.2 suite green in the macOS/Linux/Windows CI matrix (user-provided evidence; local runs are separate).
 
 ### M2.2a — Managed App Server foundation (partial; mock-only)
 
@@ -90,7 +91,7 @@
 - [x] Terminal evidence independent of token usage; running, disconnected and uncertain outcomes retained.
 - [x] Read-only historical status with explicitly unconfirmed connectivity/outcomes and no automatic action.
 - [x] Offline mock, corruption, capacity, restart, interrupted-publication and compatibility tests.
-- [ ] Execute the expanded suite on Linux and Windows; local macOS results are separate evidence.
+- [x] Expanded baseline suite validated by the macOS/Linux/Windows CI matrix (user-provided evidence in M2.2b.3 request).
 - [ ] Real execution remains blocked by effective process policy, containment and separately authorized validation.
 
 See [M2.2b.1 technical report](M2_2B_1_REPORT.md). No hooks, assisted handoff or global Codex configuration changes.
@@ -121,7 +122,21 @@ See [M2.2b.1 technical report](M2_2B_1_REPORT.md). No hooks, assisted handoff or
 - [x] Offline macOS/Linux process-tree fixtures, cancellation and application-owned signal handling tests; Windows fail-closed boundary retained.
 - [x] Revoke group signaling after observed leader exit; document residual numeric identity races and escaped descendants.
 - [x] Document unexpected parent failures and a future Windows Job Object design.
-- [ ] Verify this revision in the macOS/Linux/Windows CI matrix (local macOS evidence only).
+- [x] Merged M2.2b.2 baseline green in the macOS/Linux/Windows CI matrix (user-provided evidence in M2.2b.3 request).
 - [ ] Strong OS containment for escaped descendants and parent hard failures; real execution remains disabled.
 
 See [M2.2b.2 report](M2_2B_2_REPORT.md) for exact guarantees, validation and remaining prerequisites.
+
+
+## M2.2b.3 — Managed runtime policy verification (implemented offline subset)
+
+- [x] Verify pinned 0.166.0 config/read, configRequirements/read and effective thread contracts against retained schemas/checksums.
+- [x] Strict bounded mock policy admission with explicit requested, resolved, administrative, effective-thread and unsupported-runtime evidence.
+- [x] Independent offline-harness isolation assertions required before mock thread creation; production eligibility always false.
+- [x] Durable acquisition, policy reads, effective thread verification and ready ordering; revalidation before a separately authorized turn.
+- [x] Negative mock cases for missing/ambiguous/conflicting evidence, unsafe policies, integrations, protocol failures, privacy and cleanup errors.
+- [x] Document process-local isolation candidates and unsupported guarantees without changing global configuration.
+- [ ] Run this revision's expanded suite in macOS/Linux/Windows CI; baseline matrix evidence does not validate new changes.
+- [ ] Prove startup-side-effect isolation, complete capability restrictions, stronger OS containment and authenticated enforcement before enabling any real launcher.
+
+See [M2.2b.3 report](M2_2B_3_REPORT.md). Real App Server execution remains disabled.
