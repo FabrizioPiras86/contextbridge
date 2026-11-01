@@ -9,6 +9,7 @@ import { createCheckpoint, verifyLatest } from './snapshot.ts';
 import { storeDir } from './storage.ts';
 import { codexHookCompatibility, hooksStatus, manageHooks } from './hooks/install.ts';
 import { nextSession } from './next.ts';
+import { contextCommand } from './telemetry/cli.ts';
 import type { Agent } from './types.ts';
 
 const HELP = `ContextBridge CLI (foundation preview)\n\n` +
@@ -19,6 +20,7 @@ const HELP = `ContextBridge CLI (foundation preview)\n\n` +
   `  checkpoint  Create a checkpoint using explicitly supplied work state\n` +
   `  hooks       Install, inspect, or remove opt-in project-local Codex capture\n` +
   `  memory      Add or list local, unverified project memory\n` +
+  `  context     Inspect or explicitly import local token telemetry\n` +
   `  verify      Verify the latest checkpoint checksum\n` +
   `  doctor      Check basic runtime prerequisites\n` +
   `  next        Start a fresh Codex session from the latest verified checkpoint\n` +
@@ -36,9 +38,13 @@ const HELP = `ContextBridge CLI (foundation preview)\n\n` +
   `Hooks: contextbridge hooks install|status|uninstall --agent codex [--project PATH]\n` +
   `       install requires --yes (explicit opt-in), or use --dry-run; uninstall supports --dry-run.\n` +
   `       Review installed hook definitions in Codex /hooks before use.\n` +
+  `Context: contextbridge context status [--project PATH] [--session ID --thread ID]\n` +
+  `         contextbridge context ingest --source codex-app-server --source-version 0.166.0\n` +
+  `           --session ID --observed-at UTC_ISO_TIMESTAMP --sequence INTEGER --yes [--project PATH]\n` +
+  `         ingest reads one bounded notification from stdin; live capture is not implemented.\n` +
   `next requires --agent codex and an installed Codex CLI on PATH.\n` +
   `It runs interactively in the selected project (default: current directory).\n` +
-  `Claude handoff, automatic rollover, and token monitoring are not implemented.\n`;
+  `Claude handoff, automatic rollover, and live token monitoring are not implemented.\n`;
 
 function values(args: string[], key: string): string[] {
   const result: string[] = [];
@@ -69,12 +75,15 @@ function reportRecovery(recovery?: MemoryRecovery): void {
 
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
-  if (['next', 'memory', 'hooks'].includes(command) && (args.includes('--help') || args.includes('-h'))) {
+  if (['next', 'memory', 'hooks', 'context'].includes(command) && (args.includes('--help') || args.includes('-h'))) {
     console.log(HELP);
     return;
   }
   const root = resolve(option(args, 'project', process.cwd())!);
   switch (command) {
+    case 'context':
+      await contextCommand(root, args);
+      return;
     case undefined:
     case '--help':
     case '-h':
@@ -96,8 +105,9 @@ async function main(): Promise<void> {
     case 'status': {
       const config = await loadConfig(root);
       console.log(`Agent: ${config.agent}`);
-      console.log(`Mode: ${config.mode} (Codex assisted next available; token monitoring pending)`);
-      console.log(`Thresholds: ${config.thresholds.warning}/${config.thresholds.handoff}/${config.thresholds.safety}% (not monitored yet)`);
+      console.log(`Mode: ${config.mode} (Codex assisted next and local context import available; live monitoring pending)`);
+      console.log(`Thresholds: ${config.thresholds.warning}/${config.thresholds.handoff}/${config.thresholds.safety}% (advisory only for verified active occupancy)`);
+      console.log('Telemetry: use context status for independent imported streams; active context utilization is unknown.');
       try {
         const snapshot = await verifyLatest(root);
         console.log(`Latest snapshot: ${snapshot.id}`);
@@ -184,7 +194,7 @@ async function main(): Promise<void> {
       console.log(`Git: ${commandVersion('git')}`);
       console.log(`Claude Code: ${commandVersion('claude')}`);
       console.log(`Codex: ${commandVersion('codex')}`);
-      console.log('Codex assisted next is available. Claude handoff, automatic rollover and token monitoring are not implemented.');
+      console.log('Codex assisted next and local context import are available. Claude handoff, automatic rollover and live token monitoring are not implemented.');
       return;
     }
     case 'next':

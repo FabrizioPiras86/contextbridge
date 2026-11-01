@@ -28,7 +28,7 @@
 - [x] Stable delivery IDs, replay checks, continuation guard, and watchdog.
 - [x] Explicit project-local installation, status, dry-run, safe uninstall, and conflict detection.
 - [x] Mocked offline tests and documented CLI/IDE manual verification.
-- [ ] Authenticated live CLI smoke test and adapter-specific VS Code validation.
+- [x] Authenticated live CLI smoke test and adapter-specific VS Code memory-capture validation (completed by the project owner; owner-reported evidence).
 - [ ] Expand the checked Codex version matrix after contract verification.
 - [ ] Evidence-backed or model-assisted extraction from additional sources.
 
@@ -51,7 +51,22 @@
 - [ ] Implement broader Codex skills and supported telemetry.
 - [x] Implement `next --agent codex` to create a **new** interactive session from verified state.
 - [ ] Implement the Claude Code assisted `next` adapter.
-- [ ] Report unsupported capabilities without guessing a context percentage.
+- [x] Report unsupported context occupancy without guessing a context percentage.
+
+### M2.1 — Context telemetry foundation (supported subset implemented)
+
+- [x] Inspect official documentation and installed Codex 0.166.0 generated schemas.
+- [x] Provider-neutral versioned observations separated from semantic memory.
+- [x] Strict bounded App Server token notification parser with explicit provenance.
+- [x] Opt-in local stdin import and bounded, locked, atomic observation storage.
+- [x] Independent capture/thread streams, replay handling, caller-supplied ordering, and freshness.
+- [x] `context status` with unavailable/supported/stale states and unknown active occupancy.
+- [x] Deterministic advisory evaluator for future verified active-context measurements, including exact boundaries.
+- [x] Offline privacy, corruption, portability, regression tests, and documented limitations.
+- [ ] Managed continuous App Server event capture with verified lifecycle and observation metadata.
+- [ ] A documented, justified measurement of active context occupancy.
+- [ ] Supported continuous telemetry integration for interactive Codex CLI and existing VS Code sessions.
+- [ ] Execute the expanded test suite in the macOS/Linux/Windows CI matrix (local macOS execution is separate evidence).
 
 ## M3 — Managed automatic mode
 
