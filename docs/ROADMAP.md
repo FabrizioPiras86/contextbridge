@@ -21,6 +21,17 @@
 - [x] Bounded recent memory in checkpoints with legacy snapshot compatibility.
 - [x] Recovery, privacy, CLI, compatibility, and portable filesystem tests in the existing OS CI matrix.
 
+### M1.2 — Opt-in Codex automatic memory capture (supported subset implemented)
+
+- [x] Strict, bounded `SessionStart` / `Stop` adapter feeding the M1.1 journal.
+- [x] Deterministic extraction from explicitly labeled assistant memory blocks.
+- [x] Stable delivery IDs, replay checks, continuation guard, and watchdog.
+- [x] Explicit project-local installation, status, dry-run, safe uninstall, and conflict detection.
+- [x] Mocked offline tests and documented CLI/IDE manual verification.
+- [ ] Authenticated live CLI smoke test and adapter-specific VS Code validation.
+- [ ] Expand the checked Codex version matrix after contract verification.
+- [ ] Evidence-backed or model-assisted extraction from additional sources.
+
 ### Remaining M1 work
 
 
@@ -33,9 +44,11 @@
 
 ## M2 — Assisted agent integrations
 
-- [ ] Validate supported hook events and payload schemas for both agents.
+- [x] Validate the documented Codex `SessionStart` / `Stop` payload subset for M1.2.
+- [ ] Validate supported Claude Code hook events and payload schemas.
 - [ ] Implement Claude Code skill, local hooks and context telemetry where available.
-- [ ] Implement Codex skill, hooks and telemetry where available.
+- [x] Implement opt-in Codex project-local hooks for labeled memory capture.
+- [ ] Implement broader Codex skills and supported telemetry.
 - [x] Implement `next --agent codex` to create a **new** interactive session from verified state.
 - [ ] Implement the Claude Code assisted `next` adapter.
 - [ ] Report unsupported capabilities without guessing a context percentage.
