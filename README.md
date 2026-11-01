@@ -122,11 +122,11 @@ Status reports `unavailable`, `supported`, or `stale` and lists independent stre
 
 Only bounded numeric records and hashed correlation identifiers are stored in `.contextbridge/telemetry/`, independently of memory and checkpoints. Normal use creates no telemetry store. Existing privacy configuration stays unchanged; `--yes` authorizes a single local import without enabling background or remote telemetry. See [Context telemetry: contract, calculations, limits, and recovery](docs/CONTEXT_TELEMETRY.md) and the [M2.1 technical report](docs/M2_1_REPORT.md).
 
-## Managed App Server foundation (M2.2a)
+## Managed App Server foundation (M2.2a / M2.2b.1)
 
-An internal bounded subprocess transport and capture state machine are tested against a local Node mock server. Separate initialization and exactly-one-turn authorization, content-free schema-2 observations, explicit lifecycle snapshots, and compatibility with M2.1 imports are implemented. `context run --agent codex --project PATH --yes` deliberately exits with an unsupported message: **real execution remains disabled on every platform** pending process containment, process-local policy verification, and lifecycle persistence independent of usage. No real model call is made, and `--yes` does not authorize a turn.
+An internal bounded subprocess transport and capture state machine are tested against a local Node mock server. Separate initialization and exactly-one-turn authorization, content-free schema-2 observations, durable lifecycle persistence independent of usage, and compatibility with M2.1 imports are implemented. Acquisition is saved before initialization and turn-pending is saved before submission; a storage failure blocks submission. Lifecycle and usage snapshots publish together through a bounded queue and shared writer lock. Historical status is read-only: saved connectivity and unfinished outcomes remain unconfirmed, without resuming or replaying sessions. `context run --agent codex --project PATH --yes` deliberately exits with an unsupported message: **real execution remains disabled on every platform** pending process containment, process-local policy verification, and the remaining real-execution prerequisites. No real model call is made, and `--yes` does not authorize a turn.
 
-See [supported contracts, limits, and M2.2b prerequisites](docs/MANAGED_APP_SERVER.md) and the [implementation report](docs/M2_2A_REPORT.md). Context occupancy, automatic rollover, and attachment to existing CLI/IDE sessions remain unavailable.
+See [supported contracts, limits, and M2.2b prerequisites](docs/MANAGED_APP_SERVER.md) and the [durable lifecycle report](docs/M2_2B_1_REPORT.md). Context occupancy, automatic rollover, and attachment to existing CLI/IDE sessions remain unavailable.
 
 ## Assisted Codex handoff
 

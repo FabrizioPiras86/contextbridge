@@ -16,6 +16,12 @@ const mock = resolve('tests/fixtures/managed/server.mjs');
 const canary = 'PRIVATE_MANAGED_CANARY_9187';
 const pause = () => new Promise((r) => setTimeout(r, 40));
 const posix = { skip: process.platform === 'win32' };
+async function captureRoot(t) {
+  const root = await mkdtemp(join(tmpdir(), 'contextbridge-lifecycle-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  await initProject(root, 'codex');
+  return root;
+}
 function transport(mode = 'normal', deadline = 1000) { return new ManagedTransport(process.execPath, [mock, mode], process.cwd(), deadline); }
 
 test('generated schema fixtures retain exact checksums and reviewed public methods', async () => {
@@ -31,7 +37,7 @@ for (const mode of ['normal', 'fragment', 'stderr', 'failed', 'interrupt', 'runn
   const root = await mkdtemp(join(tmpdir(), 'contextbridge-managed-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   await initProject(root, 'codex');
-  const rpc = transport(mode); const capture = new ManagedCapture(rpc); t.after(() => capture.stop());
+  const rpc = transport(mode); const capture = new ManagedCapture(rpc, root); t.after(() => capture.stop());
   await capture.initialize(true, process.cwd());
   assert.equal(capture.state, 'ready');
   await assert.rejects(capture.sendOneTurn(Buffer.from(canary), false), /authorization/);
@@ -59,8 +65,9 @@ for (const mode of ['normal', 'fragment', 'stderr', 'failed', 'interrupt', 'runn
 });
 
 for (const mode of ['invalid', 'invalid-utf8', 'partial', 'delayed', 'duplicate', 'overflow', 'depth', 'bad-id', 'unknown-id', 'drop', 'missing', 'hang', 'approval', 'error', 'policy']) test(`fails safely without sensitive diagnostics: ${mode}`, posix, async (t) => {
+  const root = await captureRoot(t);
   const rpc = transport(mode, 200); t.after(() => rpc.stop());
-  const capture = new ManagedCapture(rpc);
+  const capture = new ManagedCapture(rpc, root);
   await assert.rejects(capture.initialize(true, process.cwd()), (error: Error) => !error.message.includes(canary));
   assert.equal(capture.observation(), undefined);
 });
@@ -73,8 +80,9 @@ test('pending admission bounded and shutdown rejects every waiter', posix, async
 });
 
 test('connection loss after turn submission is uncertain and cannot replay', posix, async (t) => {
+  const root = await captureRoot(t);
   const rpc = transport('turn-drop'); t.after(() => rpc.stop());
-  const capture = new ManagedCapture(rpc);
+  const capture = new ManagedCapture(rpc, root);
   await capture.initialize(true, process.cwd());
   await assert.rejects(capture.sendOneTurn(Buffer.from('hello'), true));
   assert.equal(capture.state, 'unknown-outcome');
@@ -99,7 +107,7 @@ test('M2.1 imports coexist unchanged with managed records and interrupted stagin
     sourceVersion: '0.166.0', sessionId: 'import-capture', observedAt: new Date().toISOString(), sequence: 1,
   });
   await ingestTelemetry(root, imported, true);
-  const rpc = transport(); const capture = new ManagedCapture(rpc); t.after(() => capture.stop());
+  const rpc = transport(); const capture = new ManagedCapture(rpc, root); t.after(() => capture.stop());
   await capture.initialize(true, process.cwd()); await capture.sendOneTurn(Buffer.from('safe'), true); await pause(); await capture.stop();
   await capture.persist(root, true);
   assert.deepEqual((await listTelemetry(root)).find((item) => item.schemaVersion === 1), imported);
@@ -113,13 +121,15 @@ test('M2.1 imports coexist unchanged with managed records and interrupted stagin
 });
 
 test('authorization and bounded prompt validation happen before submission', posix, async (t) => {
-  const rpc = transport(); const capture = new ManagedCapture(rpc); t.after(() => capture.stop());
+  const root = await captureRoot(t);
+  const rpc = transport(); const capture = new ManagedCapture(rpc, root); t.after(() => capture.stop());
   await assert.rejects(capture.initialize(false, process.cwd()), /authorization/);
   await capture.initialize(true, process.cwd());
   for (const prompt of [Buffer.alloc(0), Buffer.alloc(8193), Buffer.from([255])]) await assert.rejects(capture.sendOneTurn(prompt, true), /prompt/);
   assert.equal(capture.state, 'ready');
   await assert.rejects(rpc.request('account/read', { refreshToken: true }));
   await capture.sendOneTurn(Buffer.from('safe'), true);
+  await capture.stop();
 });
 
 test('stdin backpressure stops admission with no application write queue', posix, async (t) => {
@@ -146,9 +156,11 @@ test('child signal termination disconnects pending requests without affecting an
   const signaled = transport('signal'); const independent = transport();
   t.after(() => signaled.stop()); t.after(() => independent.stop());
   await assert.rejects(signaled.request('initialize', {}));
-  const capture = new ManagedCapture(independent);
+  const capture = new ManagedCapture(independent, await captureRoot(t));
+  t.after(() => capture.stop());
   await capture.initialize(true, process.cwd());
   await signaled.stop();
   assert.deepEqual(await independent.request('account/read', { refreshToken: false }), {});
   assert.equal(capture.state, 'ready');
+  await capture.stop();
 });

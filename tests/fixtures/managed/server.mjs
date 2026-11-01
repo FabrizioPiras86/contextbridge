@@ -1,4 +1,4 @@
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline';
 const mode = process.argv[2] || 'normal';
 const canary = 'PRIVATE_MANAGED_CANARY_9187';
@@ -35,17 +35,26 @@ else createInterface({ input: process.stdin }).on('line', async (line) => {
       for (const byte of response) { process.stdout.write(Buffer.from([byte])); await new Promise((r) => setTimeout(r, 1)); }
     } else send({ id: m.id, result: { userAgent: 'mock', codexHome: '/mock', platformFamily: 'unix', platformOs: 'mock' } });
   } else if (m.method === 'thread/start') {
+    if (process.argv[3] && JSON.parse(readFileSync(process.argv[3], 'utf8')).lifecycles.at(-1).turn !== 'initializing') process.exit(4);
     if (!initialized || m.params.ephemeral !== true || m.params.approvalPolicy !== 'never' || m.params.sandbox !== 'read-only') process.exit(2);
     send({ id: m.id, result: { thread: { id: 'thread-1', cliVersion: '0.166.0', createdAt: 0, updatedAt: 0, cwd: m.params.cwd, ephemeral: true, modelProvider: 'mock', preview: '', projectId: null, sessionId: 'mock-session', source: 'appServer', status: { type: 'idle' }, turns: [] }, model: 'mock', modelProvider: 'mock', approvalsReviewer: 'user', cwd: m.params.cwd, approvalPolicy: mode === 'policy' ? 'on-request' : 'never', sandbox: { type: 'readOnly', networkAccess: false } } });
   } else if (m.method === 'turn/start') {
+    if (process.argv[3]) {
+      const store = JSON.parse(readFileSync(process.argv[3], 'utf8'));
+      const latest = store.lifecycles.at(-1);
+      if (latest.turn !== 'turn-pending' || latest.threadId === 'thread-1' || latest.turnId) process.exit(3);
+      writeFileSync(process.argv[4], 'turn-pending-observed');
+    }
     const event = (method, status, threadId = 'thread-1') => ({ method, params: { threadId, turn: { id: 'turn-1', status, items: [{ type: 'agentMessage', id: 'item-1', text: canary }], error: null } } });
     if (mode === 'turn-drop') return process.exit(0);
     send(event('turn/started', 'inProgress', 'foreign'));
     send({ method: 'thread/tokenUsage/updated', params: { threadId: 'foreign', turnId: 'foreign-turn', tokenUsage: { secret: canary } } });
     send(event('turn/started', 'inProgress'));
+    if (mode === 'burst') for (let i = 0; i < 100; i++) send(event('turn/started', 'inProgress'));
     send({ method: 'item/agentMessage/delta', params: { delta: canary } });
-    send({ method: 'thread/tokenUsage/updated', params: { threadId: 'thread-1', turnId: 'turn-1', tokenUsage: { total: usage, last: usage, modelContextWindow: 100 } } });
+    if (mode !== 'no-usage') send({ method: 'thread/tokenUsage/updated', params: { threadId: 'thread-1', turnId: 'turn-1', tokenUsage: { total: usage, last: usage, modelContextWindow: 100 } } });
     send({ id: m.id, result: { turn: { id: 'turn-1', status: 'inProgress', items: [] } } });
+    if (mode === 'usage-exit') return process.exit(0);
     if (mode !== 'interrupt' && mode !== 'running') {
       const status = mode === 'failed' ? 'failed' : 'completed';
       process.stdout.write(JSON.stringify(event('turn/completed', status)) + '\n' + JSON.stringify(event('turn/completed', status)) + '\n' + JSON.stringify(event('turn/started', 'inProgress')) + '\n');

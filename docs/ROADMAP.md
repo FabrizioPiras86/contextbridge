@@ -78,9 +78,22 @@
 - [x] Actual Node mock subprocess tests, canaries, interruption, uncertainty, backpressure and persistence recovery.
 - [x] Prepare `context run` as an explicitly disabled command on all platforms.
 - [ ] Production process-local configuration and resolved-policy verification.
-- [ ] Persist acquisition/lifecycle without a token event and serialize bounded automatic publication.
+- [x] M2.2b.1: persist acquisition/lifecycle without a token event and serialize bounded automatic publication (mock-only).
 - [ ] OS containment, parent-signal handling and cross-platform cleanup evidence (Windows execution disabled).
 - [ ] M2.2b: separately authorized live smoke test after all [prerequisites](MANAGED_APP_SERVER.md#required-m22b-prerequisites-and-live-smoke-test).
+
+### M2.2b.1 — Durable managed lifecycle foundation (implemented; mock-only)
+
+- [x] Versioned, bounded, strictly validated content-free acquisition records with hashed correlation.
+- [x] Durable acquisition and pending-turn admission barriers; failed persistence prevents submission.
+- [x] Shared atomic lifecycle/usage publication, bounded serial queue and concurrent-writer exclusion.
+- [x] Terminal evidence independent of token usage; running, disconnected and uncertain outcomes retained.
+- [x] Read-only historical status with explicitly unconfirmed connectivity/outcomes and no automatic action.
+- [x] Offline mock, corruption, capacity, restart, interrupted-publication and compatibility tests.
+- [ ] Execute the expanded suite on Linux and Windows; local macOS results are separate evidence.
+- [ ] Real execution remains blocked by effective process policy, containment and separately authorized validation.
+
+See [M2.2b.1 technical report](M2_2B_1_REPORT.md). No hooks, assisted handoff or global Codex configuration changes.
 
 ## M3 — Managed automatic mode
 
