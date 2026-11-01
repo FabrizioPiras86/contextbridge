@@ -10,8 +10,15 @@ export interface TokenUsage {
   reasoningOutputTokens: number;
   totalTokens: number;
 }
+export interface ManagedMetadata {
+  connection: 'connected' | 'disconnected' | 'stopped';
+  turn: 'ready' | 'turn-pending' | 'turn-running' | 'turn-completed' | 'turn-failed' | 'turn-interrupted' | 'unknown-outcome';
+  completeness: 'partial' | 'complete';
+  receiptAt: string;
+}
 export interface TelemetryObservation {
-  schemaVersion: 1;
+  schemaVersion: 1 | 2;
+  managed?: ManagedMetadata;
   provider: string;
   source: string;
   sessionId: string;
@@ -25,11 +32,11 @@ export interface TelemetryObservation {
   context: { kind: 'unknown' } | { kind: 'measured'; usedTokens: number; verification: 'verified'; semantics: 'active-context' };
   provenance: {
     sourceVersion: string;
-    transport: 'local-import';
+    transport: 'local-import' | 'managed-stdio-mock';
     schema: 'verified';
     origin: 'unverified';
-    timestamp: 'caller-supplied';
-    ordering: 'caller-supplied';
+    timestamp: 'caller-supplied' | 'client-receipt';
+    ordering: 'caller-supplied' | 'local-receive';
     confidence: 'reported';
   };
 }

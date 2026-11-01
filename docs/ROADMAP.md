@@ -68,6 +68,20 @@
 - [ ] Supported continuous telemetry integration for interactive Codex CLI and existing VS Code sessions.
 - [ ] Execute the expanded test suite in the macOS/Linux/Windows CI matrix (local macOS execution is separate evidence).
 
+### M2.2a — Managed App Server foundation (partial; mock-only)
+
+- [x] Preserve version-pinned generated schemas and checksums for handshake, lifecycle, auth checks and privileged requests.
+- [x] Bounded stdio JSONL transport with separate pipes, UTF-8 framing, duplicate-key/depth checks, request admission and deadlines.
+- [x] Independent acquisition identity, exact correlation, lifecycle state machine and separate single-turn authorization.
+- [x] Reject every server request without response; discard content and stderr.
+- [x] Schema-2 mock-managed observation snapshots alongside unchanged schema-1 imports.
+- [x] Actual Node mock subprocess tests, canaries, interruption, uncertainty, backpressure and persistence recovery.
+- [x] Prepare `context run` as an explicitly disabled command on all platforms.
+- [ ] Production process-local configuration and resolved-policy verification.
+- [ ] Persist acquisition/lifecycle without a token event and serialize bounded automatic publication.
+- [ ] OS containment, parent-signal handling and cross-platform cleanup evidence (Windows execution disabled).
+- [ ] M2.2b: separately authorized live smoke test after all [prerequisites](MANAGED_APP_SERVER.md#required-m22b-prerequisites-and-live-smoke-test).
+
 ## M3 — Managed automatic mode
 
 - [ ] Claude Agent SDK managed adapter.

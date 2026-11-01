@@ -11,7 +11,7 @@ export interface ImportMetadata {
   observedAt: string;
   sequence: number;
 }
-function strictJson(text: string): unknown {
+export function strictJson(text: string): unknown {
   let value: unknown;
   try { value = JSON.parse(text); } catch { throw new Error('Invalid telemetry JSON.'); }
   const stack: (Set<string> | null)[] = [];
@@ -67,6 +67,21 @@ export function parseCodexTokenUsage(bytes: Buffer, metadata: ImportMetadata): T
 // Persistent records are untrusted too. Reject fields that could assert a verified
 // occupancy or authenticated origin.
 export function validateCodexObservation(value: unknown): asserts value is TelemetryObservation {
+  if (object(value) && value.schemaVersion === 2) {
+    const m = value.managed, p = value.provenance;
+    if (!object(m) || !onlyKeys(m, ['connection', 'turn', 'completeness', 'receiptAt']) ||
+        !['connected', 'disconnected', 'stopped'].includes(m.connection as string) ||
+        !['ready', 'turn-pending', 'turn-running', 'turn-completed', 'turn-failed', 'turn-interrupted', 'unknown-outcome'].includes(m.turn as string) ||
+        !['partial', 'complete'].includes(m.completeness as string) || !timestamp(m.receiptAt) ||
+        (m.completeness === 'complete' && !['turn-completed', 'turn-failed', 'turn-interrupted'].includes(m.turn as string)) ||
+        !object(p) || p.transport !== 'managed-stdio-mock' || p.timestamp !== 'client-receipt' || p.ordering !== 'local-receive') {
+      throw new Error('Invalid managed telemetry observation.');
+    }
+    const { managed, ...base } = value;
+    validateCodexObservation({ ...base, schemaVersion: 1, provenance: { ...p, transport: 'local-import', timestamp: 'caller-supplied', ordering: 'caller-supplied' } });
+    return;
+  }
+
   if (!object(value) || !onlyKeys(value, ['schemaVersion', 'provider', 'source', 'sessionId', 'threadId', 'turnId', 'observedAt', 'sequence',
     'cumulative', 'latest', 'modelContextWindow', 'context', 'provenance']) ||
       value.schemaVersion !== 1 || value.provider !== 'codex' || value.source !== CODEX_SOURCE ||

@@ -1,0 +1,28 @@
+{
+  "version": "0.166.0",
+  "generation": "codex app-server generate-json-schema --out DIR",
+  "sha256": {
+    "ClientRequest.json": "42caef9e6f7a544f2565d7696b03b34cd77771b91b50e639faed673bb276c262",
+    "ClientNotification.json": "706cf248d75027c84a3c63348d0ed507182e8eba40069dd17541793de029145a",
+    "ServerRequest.json": "f339be472737a0003efa25fba2e6e6c9237e621cd065b6d6995c51256e9dc1fb",
+    "ServerNotification.json": "cc06d031345c7f1f08f0ac8ccb42d889b3246fadada1aabdf4688027975efad7",
+    "JSONRPCMessage.json": "6da4cc373a7ccd01f5608ad4496eeb4d44b6a9b0d3158e85ed66b59f3c0b5114",
+    "RequestId.json": "9c72d59a306d827113020c6d31a14c326d55210d9bd6954f825196a52009f1c7",
+    "v2-ThreadStartParams.json": "e9c6d3cc18d049bfbc0249add3808fb8e5a27e1a0b5a423767aafbc3859a9428",
+    "v2-ThreadStartResponse.json": "c655daa1616548f6b3b0960acee9dcfefa8aba5965ec4fc636c84ee840a8626a",
+    "v2-TurnStartParams.json": "49e53282f327c25e7b39d97afacd038ef10ad5c4fb0431608b354d3a7bf6bcea",
+    "v2-TurnStartResponse.json": "85da8d16c86432da14440504ae1e76d13527058920d4ed81632dd50c3fbd054d",
+    "v2-TurnStartedNotification.json": "f5b0ea97eea0d28c8b009a82b9ede7bba5c194dc5bbf91b8e268b2874e0d9eee",
+    "v2-TurnCompletedNotification.json": "e9a5e3bcddaeee04afc60abafbbdcb5b0a531b5578db573fcacdd1477565bd0a",
+    "v2-ThreadTokenUsageUpdatedNotification.json": "aba4f6c7e4a19b2b842c08ee793b57000c07dafd57b922ad0d8e7c76609108c2",
+    "v2-TurnInterruptParams.json": "6dff382dae73d1dbc58406ed045605f647e7a49660e2540fbd2c6c24d60c5f2b",
+    "v2-TurnInterruptResponse.json": "531de6be06fe979b5963f249bab82498a175e614bf65ac12fb2e849dfe60bcf1",
+    "v2-GetAccountParams.json": "30b545275f60975b55bd6fbaafd70f15505801d14168ee82d3931b6e93c78aab",
+    "v2-GetAccountResponse.json": "1d44d4274ea35e1f866c4b0e3db64678fab108914c276353bdc3b1b0de286459",
+    "v2-ConfigReadParams.json": "257c54a423b47c1d209ff1076765a1564d82322fd5161670fd489a2874de1bac",
+    "v2-ConfigReadResponse.json": "69a32e3d84e16045802dff8abf01770d759ebc758965c3258a30ea4a93159fce",
+    "v2-ConfigRequirementsReadResponse.json": "8c51b24591d65b2c8137aec7e423febff648b3bda72a2d5db19514bd1991e4b8",
+    "v1-InitializeParams.json": "b55124e7c0f36a1789396daa5578217a92be67f053903696236686e59f6f212e",
+    "v1-InitializeResponse.json": "62ad689c2cb6379913c1d72749cfd8de5089d35760214123518eb92eef11acc9"
+  }
+}
