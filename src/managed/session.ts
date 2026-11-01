@@ -139,13 +139,13 @@ export class ManagedCapture {
       provenance: { transport: 'managed-stdio-mock', origin: 'unverified', ordering: 'local-receive', timestamp: 'client-receipt' },
       terminalEvidence: terminalTurns.has(turn) ? 'turn/completed' : 'none',
     };
-    if (this.#queued >= 32) { this.#writeFailure = true; void this.transport.stop(); return; }
+    if (this.#queued >= 32) { this.#writeFailure = true; void this.transport.stop().catch(() => {}); return; }
     const observation = this.observation();
     this.#queued++;
     this.#writes = this.#writes.then(async () => {
       if (this.#writeFailure) return;
       try { await ingestTelemetry(this.#root, observation, true, Date.now(), lifecycle); }
-      catch { this.#writeFailure = true; void this.transport.stop(); }
+      catch { this.#writeFailure = true; void this.transport.stop().catch(() => {}); }
     }).finally(() => { this.#queued--; });
   }
   async flush(): Promise<void> {
@@ -168,11 +168,26 @@ export class ManagedCapture {
     catch { await this.transport.stop(); }
     // An acknowledgment is not confirmation of interruption; await turn/completed.
   }
-  async stop(): Promise<void> {
-    if (this.#state === 'stopped') { await this.flush(); return; }
-    if (this.#state === 'turn-pending' || this.#state === 'turn-running') this.#outcome = 'unknown-outcome';
+  #stopping?: Promise<void>;
+  stop(): Promise<void> {
+    if (!this.#stopping) this.#stopping = this.#stop();
+    return this.#stopping;
+  }
+  async #stop(): Promise<void> {
+    if (this.#state === 'turn-pending' || this.#state === 'turn-running') {
+      this.#state = 'unknown-outcome'; this.#outcome = 'unknown-outcome';
+    }
+    try { await this.transport.stop(); }
+    catch (error) {
+      this.#connection = 'disconnected';
+      this.#refresh();
+      try { await this.flush(); }
+      catch (persistenceError) {
+        throw new AggregateError([error, persistenceError], 'Managed cleanup and persistence are unconfirmed; inspect committed storage and owned test processes.');
+      }
+      throw error;
+    }
     this.#state = 'stopped'; this.#connection = 'stopped'; this.#refresh();
-    await this.transport.stop();
     await this.flush();
   }
 }

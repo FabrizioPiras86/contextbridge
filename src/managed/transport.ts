@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { OwnedProcess } from './process.ts';
 import type { ChildProcessWithoutNullStreams } from 'node:child_process';
 import { isUtf8 } from 'node:buffer';
 import { strictJson } from '../telemetry/codex.ts';
@@ -19,17 +19,21 @@ export class ManagedTransport {
   #closed = false;
   #blocked = false;
   #timer: ReturnType<typeof setTimeout>;
-  #exited: Promise<void>;
+  #owner: OwnedProcess;
+  #cleanup?: Promise<void>;
+  #abort?: () => void;
+  get cleanup(): 'open' | 'confirmed' | 'unconfirmed' { return this.#owner.cleanup; }
   get backpressured(): boolean { return this.#blocked; }
   onNotification: (message: Record<string, unknown>) => void = () => {};
   onDisconnect: () => void = () => {};
   private deadline: number;
-  constructor(command: string, args: string[], cwd: string, deadline = 1_000) {
+  constructor(command: string, args: string[], cwd: string, deadline = 1_000, signal?: AbortSignal) {
     this.deadline = deadline;
     if (process.platform === 'win32') throw new Error('Managed subprocess execution is disabled on Windows.');
     if (!Number.isInteger(deadline) || deadline < 10 || deadline > 5_000) throw failure();
-    this.#child = spawn(command, args, { cwd, shell: false, detached: true, stdio: ['pipe', 'pipe', 'pipe'], env: {} });
-    this.#exited = new Promise((resolve) => { this.#child.once('exit', () => resolve()); this.#child.once('error', () => resolve()); });
+    if (signal?.aborted) throw failure();
+    this.#owner = new OwnedProcess(command, args, cwd);
+    this.#child = this.#owner.child;
     this.#child.on('error', () => this.#fail());
     this.#child.on('exit', () => this.#fail());
     this.#child.stdout.on('error', () => this.#fail());
@@ -41,13 +45,13 @@ export class ManagedTransport {
     this.#child.stdout.on('data', (chunk: Buffer) => this.#receive(chunk));
     // Absolute lifetime bounds even an endless notification or stderr producer.
     this.#timer = setTimeout(() => this.#fail(), 30_000);
-  }
-  #kill(signal: NodeJS.Signals): void {
-    if (this.#child.pid) {
-      try { process.kill(-this.#child.pid, signal); } catch { /* The owned process group may already have exited. */ }
+    if (signal) {
+      const abort = () => this.#fail(false);
+      signal.addEventListener('abort', abort, { once: true });
+      this.#abort = () => signal.removeEventListener('abort', abort);
     }
   }
-  #fail(): void {
+  #fail(force = true): void {
     if (this.#closed) return;
     this.#closed = true;
     clearTimeout(this.#timer);
@@ -55,7 +59,10 @@ export class ManagedTransport {
     for (const pending of this.#pending.values()) { clearTimeout(pending.timer); pending.reject(failure()); }
     this.#pending.clear();
     this.#child.stdin.destroy(); this.#child.stdout.destroy(); this.#child.stderr.destroy();
-    this.#kill('SIGKILL');
+    this.#abort?.(); this.#abort = undefined;
+    this.#cleanup = this.#owner.stop(force);
+    // Event-triggered failure cannot return a promise. Keep the sticky result for stop().
+    void this.#cleanup.catch(() => {});
     this.onDisconnect();
   }
   #send(message: unknown): void {
@@ -123,9 +130,7 @@ export class ManagedTransport {
     else pending.resolve(value.result);
   }
   async stop(): Promise<void> {
-    this.#fail();
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    await Promise.race([this.#exited, new Promise<void>((resolve) => { timer = setTimeout(resolve, 500); })]);
-    clearTimeout(timer);
+    this.#fail(false);
+    await this.#cleanup;
   }
 }

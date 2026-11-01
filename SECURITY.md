@@ -13,3 +13,7 @@ The starter records Git metadata, manually supplied work-state text, and snapsho
 ## Reporting
 
 Until the public repository and security-contact process are established, do not open a public issue containing exploit details or secrets. Agree on a private security reporting channel with the project maintainers before publication.
+
+## Mock managed process boundary
+
+Real managed App Server execution remains disabled. The POSIX test transport owns only its newly created child/group, with bounded cleanup and no persisted PID authority. It cannot contain descendants that leave the group or guarantee cleanup after parent hard failure. Numeric PID/group reuse remains a residual race; no signaling is authorized after observed leader exit. Windows fails before spawn pending tested native containment. See [the containment report](docs/M2_2B_2_REPORT.md). No raw process output is persisted and no process-name targeting is used.

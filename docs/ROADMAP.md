@@ -114,3 +114,14 @@ See [M2.2b.1 technical report](M2_2B_1_REPORT.md). No hooks, assisted handoff or
 - [ ] Comparative benchmarks: native compaction versus ContextBridge.
 - [ ] Security audit, platform matrix, release automation.
 - [ ] npm publication after package-name verification.
+
+## M2.2b.2 — Managed process containment (offline supported subset)
+
+- [x] Creation-local POSIX ownership, bounded graceful/forced cleanup, shared concurrent stop and sticky uncertainty diagnostics.
+- [x] Offline macOS/Linux process-tree fixtures, cancellation and application-owned signal handling tests; Windows fail-closed boundary retained.
+- [x] Revoke group signaling after observed leader exit; document residual numeric identity races and escaped descendants.
+- [x] Document unexpected parent failures and a future Windows Job Object design.
+- [ ] Verify this revision in the macOS/Linux/Windows CI matrix (local macOS evidence only).
+- [ ] Strong OS containment for escaped descendants and parent hard failures; real execution remains disabled.
+
+See [M2.2b.2 report](M2_2B_2_REPORT.md) for exact guarantees, validation and remaining prerequisites.
