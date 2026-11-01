@@ -1,7 +1,8 @@
+import { historicalLifecycle, terminalTurns } from '../managed/lifecycle.ts';
 import { loadConfig } from '../config.ts';
 import { CODEX_SOURCE, CODEX_VERSION, MAX_NOTIFICATION_BYTES, parseCodexTokenUsage } from './codex.ts';
 import { count, evaluateThreshold, freshness, identity, STALE_AFTER_MS, timestamp } from './model.ts';
-import { ingestTelemetry, listTelemetry } from './store.ts';
+import { ingestTelemetry, listCaptureStore } from './store.ts';
 
 async function notificationFromStdin(): Promise<Buffer> {
   const chunks: Buffer[] = [];
@@ -54,15 +55,18 @@ export async function contextCommand(root: string, args: string[]): Promise<void
   const session = parsed.get('--session'), thread = parsed.get('--thread');
   if (!!session !== !!thread) throw new Error('Select both --session and --thread, or omit both to list independent streams.');
   const sessionId = session ? identity(session) : undefined, threadId = thread ? identity(thread) : undefined;
-  const observations = (await listTelemetry(root)).filter((item) => !sessionId || (item.sessionId === sessionId && item.threadId === threadId));
+  const store = await listCaptureStore(root);
+  const observations = store.observations.filter((item) => !sessionId || (item.sessionId === sessionId && item.threadId === threadId));
+  const lifecycles = store.lifecycles.filter((item) => !sessionId || (item.acquisitionId === sessionId && item.threadId === threadId));
   const config = await loadConfig(root);
   const now = Date.now();
   console.log(JSON.stringify({
     capability: 'supported', provider: 'codex', source: CODEX_SOURCE, sourceVersion: CODEX_VERSION,
-    state: !observations.length ? 'unavailable' : observations.every((item) => (!item.managed || item.managed.connection === 'connected') && freshness(item.observedAt, now) === 'fresh') ? 'supported' : 'stale',
+    state: !observations.length ? 'unavailable' : observations.every((item) => !item.managed && freshness(item.observedAt, now) === 'fresh') ? 'supported' : 'stale',
     liveCapture: false, staleAfterMs: STALE_AFTER_MS,
     contextUtilization: 'unknown', reason: 'The supported event does not establish active context-window occupancy. CLI hooks and VS Code telemetry capture are not implemented.',
-    observations: observations.map((item) => ({ ...item, availability: 'supported', freshness: item.managed && item.managed.connection !== 'connected' ? 'stale' : freshness(item.observedAt, now),
+    lifecycles: lifecycles.map(historicalLifecycle),
+    observations: observations.map((item) => ({ ...item, ...(item.managed ? { historical: true, currentConnection: 'unconfirmed', outcome: terminalTurns.has(item.managed.turn) ? item.managed.turn : 'unconfirmed' } : {}), availability: 'supported', freshness: item.managed ? 'stale' : freshness(item.observedAt, now),
       advisory: evaluateThreshold(item, config.thresholds, now) })),
   }, null, 2));
 }
