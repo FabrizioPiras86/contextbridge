@@ -16,7 +16,7 @@ Long agent sessions can accumulate irrelevant history, verbose tool output, and 
 
 **Managed automatic mode:** Run an agent through a managed CLI frontend. The frontend controls the session lifecycle through supported APIs, monitors telemetry, and performs rollover at a safe turn boundary. New sessions must be started independently, not resumed with all prior conversation content.
 
-The preview implements user-invoked Codex assisted handoff through `next --agent codex`. Hooks, context-pressure warnings, and automatic mode remain roadmap features.
+The preview implements user-invoked Codex assisted handoff through `next --agent codex`. Opt-in Codex hooks capture explicitly labeled structured output; context-pressure warnings and automatic mode remain roadmap features.
 
 ## 3. Architecture
 
@@ -153,7 +153,7 @@ This repository intentionally begins with a zero-external-dependency foundation 
 
 ## 12. M1.1 incremental memory engine
 
-`src/memory.ts` owns event creation, strict schema/privacy validation, journal append/retrieval, and bounded checkpoint selection. It imports no provider adapter. `MemoryInput`, `createMemoryEvent`, and `appendMemory` form the extension boundary for future explicit agent imports and supported hooks; no hooks are installed and no automatic capture runs.
+`src/memory.ts` owns event creation, strict schema/privacy validation, journal append/retrieval, and bounded checkpoint selection. It imports no provider adapter. `MemoryInput`, `createMemoryEvent`, and `appendMemory` form the extension boundary for future explicit agent imports and supported hooks; the opt-in M1.2 adapter uses this boundary and is described below.
 
 The version-1 event contract is:
 
@@ -191,3 +191,14 @@ Related file paths use a portable relative syntax: forward slashes, no empty/dot
 New schema-1 snapshots optionally carry `memory: { events, omitted, incompleteTail }`. Legacy snapshots omit it and retain their original digest and validation path. Selection uses the latest contiguous suffix, capped at 20 events and 12,000 bytes of serialized event payload, in append order. Older records remain in the journal. Memory is included in the snapshot digest and both generated handoffs, as untrusted recorded claims rather than verified decisions or test results. No migrations or checkpoint rewrites occur. Semantic retrieval, evidence verification, retention, and snapshot schema migration remain future work.
 
 The test suite covers portable Windows/POSIX path rules on every host and uses platform-compatible temporary directories and directory links. The existing GitHub Actions matrix runs the suite on macOS, Linux, and Windows with Node 22; local execution alone does not establish results on other operating systems.
+
+
+## 13. M1.2 Codex automatic memory capture
+
+`src/hooks/codex.ts` validates documented Codex hook envelopes and maps one explicit assistant memory block into existing `MemoryEvent` records. `SessionStart` checks readiness without recording semantic events; `Stop` requires stable session/turn identity, an explicit non-continuation flag, and labeled data. No prose-based inference, transcript parsing, tool-result capture, or model-assisted extraction occurs.
+
+`src/hooks/install.ts` owns compatibility checks, project-local hook configuration, dry-run, conflict detection, and receipt-based reversible installation. The CLI requires explicit opt-in and the checked version/feature contract. Installation retains unrelated hooks and TOML configuration and leaves global settings, trust, and provider permissions unchanged. The provider-specific adapter holds delivery conventions; canonical journal and snapshot schemas remain provider-neutral.
+
+`bin/contextbridge-hook.mjs` supervises a bounded stdin/storage worker in `src/hooks/runner.ts`. Stable IDs permit replay after a partially completed block, while every append retains the M1.1 lock and recovery rules. Advisory output reports capture/recovery outcomes and never requests a provider continuation. Capture is best effort: concurrent writers, a timeout, or a stale lock can prevent delivery. The separate watchdog may terminate during append, so existing manual lock recovery remains necessary.
+
+See [CODEX_HOOKS.md](CODEX_HOOKS.md) for exact schemas, limits, compatibility evidence, installation recovery, Windows command constraints, and manual CLI/IDE verification. CI uses mocked payloads and capabilities without authentication or network. CLI capability detection is confirmed locally; live authenticated delivery and this adapter's VS Code integration are not verified.

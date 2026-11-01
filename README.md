@@ -4,7 +4,7 @@
 
 ContextBridge is an open-source project intended to help developers preserve actionable project context when moving between fresh AI coding sessions. Its first assisted integration supports **OpenAI Codex**; a **Claude Code** adapter is planned.
 
-> **Project status: foundation preview (v0.0.1).** The CLI supports an append-only structured project memory journal. It can initialize local memory, create manually annotated checkpoints, generate a compact handoff file, and verify snapshot checksums. It can start a fresh interactive Codex CLI session from a verified checkpoint with `next --agent codex`. It **does not yet monitor agent token usage, install hooks, extract a full conversation, or perform automatic rollover**. Claude Code handoff and managed integrations remain roadmap items.
+> **Project status: foundation preview (v0.0.1).** The CLI supports an append-only structured project memory journal. It can initialize local memory, create manually annotated checkpoints, generate a compact handoff file, and verify snapshot checksums. It can start a fresh interactive Codex CLI session from a verified checkpoint with `next --agent codex`. It supports **opt-in Codex hook capture of explicitly labeled memory blocks**. It **does not monitor agent token usage, extract a full conversation, or perform automatic rollover**. Claude Code handoff and managed integrations remain roadmap items.
 
 ## Design principles
 
@@ -56,6 +56,7 @@ The tracked project receives `.contextbridge/config.json`, `.contextbridge/state
 | `status` | Implemented | Show configuration and latest verified checkpoint |
 | `checkpoint` | Implemented | Create snapshot from explicit work-state arguments and Git metadata |
 | `memory add` / `memory list` | Implemented | Append and retrieve local structured, unverified memory |
+| `hooks install` / `hooks status` / `hooks uninstall` | Implemented for checked Codex CLI | Manage opt-in project-local structured capture |
 | `verify` | Implemented | Check latest snapshot content integrity (SHA-256) |
 | `doctor` | Implemented | Detect local Node, Git and agent CLI executables |
 | `next --agent codex` | Implemented | Start a fresh interactive Codex session from the latest verified checkpoint |
@@ -75,7 +76,7 @@ contextbridge memory list
 
 Use `node bin/contextbridge.mjs` in place of `contextbridge` when running from this checkout. All commands accept `--project /path/to/project`. `--file` may be repeated. `memory list` prints a JSON array in append order, which may differ from timestamp order. Text is preserved without translation or trimming.
 
-Events live in `.contextbridge/journal/events.jsonl`, excluded from Git by `init`. Each event contains a UUID, UTC timestamp, schema version, type, content, source, optional related files, and `verification: "unverified"`. Sources are `user-supplied` (default) or `agent-reported`, with an optional reference. Recording information never verifies its truth. This provider-neutral format can be used by future adapters; hooks, automatic capture, and token monitoring are not implemented.
+Events live in `.contextbridge/journal/events.jsonl`, excluded from Git by `init`. Each event contains a UUID, UTC timestamp, schema version, type, content, source, optional related files, and `verification: "unverified"`. Sources are `user-supplied` (default) or `agent-reported`, with an optional reference. Recording information never verifies its truth. The opt-in Codex hook adapter reuses this provider-neutral format. It captures only explicitly labeled assistant output; token monitoring remains unimplemented.
 
 Content is limited to 8,192 UTF-8 bytes; serialized events to 16,384 bytes. Source references are limited to 512 bytes and related paths to 32 portable project-relative paths. Unknown fields, invalid types, duplicates, unsafe paths, sensitive file names, and common credential patterns are rejected. Paths are metadata only: ContextBridge does not read their contents. Secret detection is heuristic and can miss credentials or reject innocent text; review content and references before saving. No redaction or translation silently changes accepted text. No network requests, external AI APIs, or telemetry are used by memory operations.
 
@@ -86,6 +87,21 @@ Normal appends write one validated UTF-8 JSON event and LF, then sync the journa
 `memory list` and `memory add` report recovered tails and marker-backed exclusions on stderr, including byte offsets; event JSON on stdout remains unchanged. The programmatic `listMemory` result has optional `recovery: { recovered, abandoned }` metadata, and `appendMemory` returns that report. Existing markers remain authoritative even for valid JSON and are never silently reversed: preserve them alongside the journal. Valid event IDs in excluded records remain reserved. Reads never create markers or change files. See [the exact recovery guarantees](docs/BLUEPRINT.md#12-m11-incremental-memory-engine). Back up the journal before investigating corruption.
 
 Concurrent writers fail safely using `journal/writer.lock`. After a process crash, first confirm no ContextBridge writer is running, then remove only `.contextbridge/journal/writer.lock` and retry. Readers remain available while the lock exists. Cleanup attempts removal even if closing the lock fails, and checks file identity to preserve a replacement lock. If both append and cleanup fail, an aggregate error retains the append error as its cause. A reported failure can occur after event bytes were written; inspect memory before retrying and reuse the same event ID to detect an already recorded event. Successful appends sync the event file; this is process-interruption recovery, not a transactional guarantee against hardware failure or power loss. Local storage checks reject symlinked journal components and hard-linked files; they do not protect against an attacker concurrently replacing files in a writable project. Append validation scans history for duplicate IDs, so appends avoid history rewrites but currently take time proportional to journal length. Retention and indexing remain future work.
+
+## Opt-in Codex automatic memory capture
+
+M1.2 supports `SessionStart` and `Stop` hooks for the checked `codex-cli 0.166.0` contract. Capture stays disabled until explicit installation and Codex trust review:
+
+```bash
+contextbridge hooks install --agent codex --project /path/to/project --dry-run
+contextbridge hooks install --agent codex --project /path/to/project --yes
+contextbridge hooks status --agent codex --project /path/to/project
+contextbridge hooks uninstall --agent codex --project /path/to/project
+```
+
+Only a final response containing one `contextbridge-memory` JSON block produces semantic memory. Supported labels cover reported decisions, completed/pending tasks, blockers, next steps, and metadata. Ordinary prose saves nothing. All captured claims remain unverified and agent-reported. There are no transcript/source reads or extra model calls. Input size, execution time, and extraction count are bounded; stable delivery IDs prevent replay duplicates. Installation preserves other hooks and settings and never changes global settings or hook trust.
+
+See [Codex hooks: contract, compatibility, recovery, and manual smoke test](docs/CODEX_HOOKS.md). CLI capabilities were inspected locally; authenticated delivery and this adapter's VS Code extension behavior remain unverified. Other Codex versions fail installation until reviewed. Windows requires Node on PATH and a directly executable Codex binary; shell-wrapper-only installations and paths with shell expansions are rejected.
 
 ## Assisted Codex handoff
 
@@ -109,6 +125,7 @@ The preview does not parse or archive conversations. Do not store credentials or
 
 - [Architecture and execution blueprint](docs/BLUEPRINT.md)
 - [Implementation roadmap](docs/ROADMAP.md)
+- [Codex capture integration and manual verification](docs/CODEX_HOOKS.md)
 - [Language policy](docs/LANGUAGE_POLICY.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)

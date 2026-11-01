@@ -7,6 +7,7 @@ import { join, resolve } from 'node:path';
 import { initProject, loadConfig } from './config.ts';
 import { createCheckpoint, verifyLatest } from './snapshot.ts';
 import { storeDir } from './storage.ts';
+import { codexHookCompatibility, hooksStatus, manageHooks } from './hooks/install.ts';
 import { nextSession } from './next.ts';
 import type { Agent } from './types.ts';
 
@@ -16,6 +17,7 @@ const HELP = `ContextBridge CLI (foundation preview)\n\n` +
   `  init        Initialize local project memory\n` +
   `  status      Show configuration and latest checkpoint\n` +
   `  checkpoint  Create a checkpoint using explicitly supplied work state\n` +
+  `  hooks       Install, inspect, or remove opt-in project-local Codex capture\n` +
   `  memory      Add or list local, unverified project memory\n` +
   `  verify      Verify the latest checkpoint checksum\n` +
   `  doctor      Check basic runtime prerequisites\n` +
@@ -31,6 +33,9 @@ const HELP = `ContextBridge CLI (foundation preview)\n\n` +
   `add supports --source user-supplied|agent-reported (default: user-supplied),\n` +
   `--reference "source description", and repeated --file project/relative/path.\n` +
   `Records are local, unverified claims. Potential secrets and unsafe paths are rejected.\n` +
+  `Hooks: contextbridge hooks install|status|uninstall --agent codex [--project PATH]\n` +
+  `       install requires --yes (explicit opt-in), or use --dry-run; uninstall supports --dry-run.\n` +
+  `       Review installed hook definitions in Codex /hooks before use.\n` +
   `next requires --agent codex and an installed Codex CLI on PATH.\n` +
   `It runs interactively in the selected project (default: current directory).\n` +
   `Claude handoff, automatic rollover, and token monitoring are not implemented.\n`;
@@ -64,7 +69,7 @@ function reportRecovery(recovery?: MemoryRecovery): void {
 
 async function main(): Promise<void> {
   const [command, ...args] = process.argv.slice(2);
-  if (['next', 'memory'].includes(command) && (args.includes('--help') || args.includes('-h'))) {
+  if (['next', 'memory', 'hooks'].includes(command) && (args.includes('--help') || args.includes('-h'))) {
     console.log(HELP);
     return;
   }
@@ -106,6 +111,31 @@ async function main(): Promise<void> {
           if ((readError as NodeJS.ErrnoException).code !== 'ENOENT') throw readError;
         }
         console.log('Latest snapshot: none');
+      }
+      return;
+    }
+    case 'hooks': {
+      const action = args[0];
+      if (!['install', 'status', 'uninstall'].includes(action)) throw new Error('Use hooks install, status, or uninstall.');
+      const seen = new Set<string>();
+      for (let i = 1; i < args.length; i++) {
+        const key = args[i];
+        if (!['--agent', '--project', '--yes', '--dry-run'].includes(key) || seen.has(key)) throw new Error('Unknown or repeated hook option.');
+        seen.add(key);
+        if (['--agent', '--project'].includes(key)) {
+          if (!args[++i] || args[i].startsWith('--')) throw new Error('Missing hook option value.');
+        }
+      }
+      if (option(args, 'agent') !== 'codex') throw new Error('Hooks require --agent codex. Other providers are not implemented.');
+      if (action === 'status') {
+        console.log(JSON.stringify({ ...await hooksStatus(root), compatibility: codexHookCompatibility('codex', root) }, null, 2));
+      } else {
+        if (action === 'install') {
+          if (!args.includes('--yes') && !args.includes('--dry-run')) throw new Error('Installation requires explicit opt-in with --yes; preview with --dry-run.');
+          const compatibility = codexHookCompatibility('codex', root);
+          if (!compatibility.supported) throw new Error(compatibility.reason);
+        }
+        console.log(await manageHooks(root, action as 'install' | 'uninstall', args.includes('--dry-run')));
       }
       return;
     }
