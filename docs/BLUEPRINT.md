@@ -226,3 +226,8 @@ The schema-2 envelope reads old schema-1 envelopes without rewriting imports or 
 ## M2.2b.2 process ownership boundary
 
 Internal mock transport delegates creation-local POSIX child/group cleanup to `src/managed/process.ts`. Cancellation and explicit shutdown use bounded graceful escalation; transport failures force cleanup. Ownership is never reconstructed from saved state. Numeric group reuse, escaped descendants and parent hard failures prevent a production containment guarantee. Windows and real managed execution remain disabled. Lifecycle schemas, terminal evidence and historical uncertainty remain independent of process exit or cleanup. See [M2.2b.2 report](M2_2B_2_REPORT.md).
+
+
+## M2.2b.3 runtime policy verification boundary
+
+The provider-specific `src/managed/policy.ts` separates requested configuration, reported resolved configuration, administrative restrictions, effective thread policy and unverified runtime properties. Strict pinned config and requirements reads precede mock thread creation; effective sandbox/network/reviewer/model checks precede ready publication. Missing independent offline-harness isolation evidence blocks admission. All assessments retain productionEligible=false because the protocol does not establish complete startup isolation or capability absence. A separate turn authorization and durable pending barrier precede revalidation and submission. Provider-neutral lifecycle and telemetry schemas remain unchanged. See the [M2.2b.3 report](M2_2B_3_REPORT.md); real execution remains disabled.

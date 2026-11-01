@@ -1,3 +1,4 @@
+import { mockEvidence } from './fixtures/managed/evidence.ts';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, access, readFile, writeFile, rm } from 'node:fs/promises';
@@ -188,8 +189,8 @@ for (const mode of ['exit', 'exception', 'kill']) test(`unexpected parent ${mode
 for (const mode of ['running', 'normal']) test(`concurrent capture stop preserves turn evidence: ${mode}`, posix, async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'contextbridge-containment-lifecycle-'));
   const rpc = new ManagedTransport(process.execPath, [resolve('tests/fixtures/managed/server.mjs'), mode], root);
-  const capture = new ManagedCapture(rpc, root);
-  t.after(async () => { try { await rpc.stop(); } finally { await rm(root, { recursive: true, force: true }); } });
+  const capture = new ManagedCapture(rpc, root, mockEvidence);
+  t.after(async () => { try { await capture.stop(); } finally { await rm(root, { recursive: true, force: true }); } });
   await initProject(root, 'codex');
   await capture.initialize(true, root);
   await capture.sendOneTurn(Buffer.from('PRIVATE_PROCESS_CANARY'), true);

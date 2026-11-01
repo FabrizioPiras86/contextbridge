@@ -1,11 +1,13 @@
 import { isUtf8 } from 'node:buffer';
 import { randomUUID } from 'node:crypto';
-import { identity, object } from '../telemetry/model.ts';
+import { identity, object, onlyKeys } from '../telemetry/model.ts';
 import type { TelemetryObservation } from '../telemetry/model.ts';
 import { parseCodexTokenUsage } from '../telemetry/codex.ts';
 import { ingestTelemetry } from '../telemetry/store.ts';
 import { terminalTurns } from './lifecycle.ts';
 import type { LifecycleRecord } from './lifecycle.ts';
+import { evaluateRuntimePolicy, selectMockIsolationEvidence, validateResolvedConfig, validateRequirements, validateEffectiveThread } from './policy.ts';
+import type { MockIsolationEvidence, RuntimePolicyAssessment } from './policy.ts';
 import { ManagedTransport } from './transport.ts';
 
 export type CaptureState = 'initializing' | 'ready' | 'turn-pending' | 'turn-running' | 'turn-completed' |
@@ -23,6 +25,10 @@ export class ManagedCapture {
   readonly acquisitionId = randomUUID();
   #state: CaptureState = 'initializing';
   #thread?: string;
+  #cwd?: string;
+  #mockEvidence?: MockIsolationEvidence;
+  #policy?: RuntimePolicyAssessment;
+  policyAssessment(): RuntimePolicyAssessment | undefined { return this.#policy ? structuredClone(this.#policy) : undefined; }
   #turn?: string;
   #sequence = 0;
   #used = false;
@@ -37,13 +43,15 @@ export class ManagedCapture {
   #writeFailure = false;
   #queued = 0;
   #recording = false;
-  constructor(transport: ManagedTransport, root: string) {
+  constructor(transport: ManagedTransport, root: string, mockEvidence?: MockIsolationEvidence) {
+    this.#mockEvidence = selectMockIsolationEvidence(mockEvidence);
     this.#root = root;
     this.transport = transport;
     transport.onNotification = (message) => this.#notification(message);
     transport.onDisconnect = () => {
       if (this.#state === 'stopped') return;
       this.#connection = 'disconnected';
+      this.#policy = undefined;
       if (this.#state === 'turn-pending' || this.#state === 'turn-running' || this.#state === 'unknown-outcome') {
         this.#state = 'unknown-outcome'; this.#outcome = 'unknown-outcome';
       } else this.#state = 'disconnected';
@@ -56,27 +64,37 @@ export class ManagedCapture {
     try {
       this.#refresh(); await this.flush();
       const result = await this.transport.request('initialize', { clientInfo: { name: 'contextbridge', version: '0.0.1' }, capabilities: { experimentalApi: false } });
-      if (!object(result) || typeof result.userAgent !== 'string' || typeof result.codexHome !== 'string' || typeof result.platformFamily !== 'string' || typeof result.platformOs !== 'string') throw new Error('Managed initialization contract failed.');
+      if (!object(result) || !onlyKeys(result, ['userAgent', 'codexHome', 'platformFamily', 'platformOs']) || typeof result.userAgent !== 'string' || typeof result.codexHome !== 'string' || typeof result.platformFamily !== 'string' || typeof result.platformOs !== 'string') throw new Error('Managed initialization contract failed.');
       this.transport.notifyInitialized();
-      const thread = await this.transport.request('thread/start', { cwd, ephemeral: true, approvalPolicy: 'never', approvalsReviewer: 'user', sandbox: 'read-only' });
-      if (!object(thread) || !object(thread.thread) || typeof thread.thread.id !== 'string' || thread.cwd !== cwd ||
-          thread.thread.ephemeral !== true || thread.approvalsReviewer !== 'user' || thread.approvalPolicy !== 'never' || !object(thread.sandbox) || thread.sandbox.type !== 'readOnly' || thread.sandbox.networkAccess !== false) {
-        throw new Error('Managed effective policy check failed.');
-      }
+      this.#cwd = cwd;
+      const config = await this.transport.request('config/read', { cwd, includeLayers: true });
+      validateResolvedConfig(config);
+      const requirements = await this.transport.request('configRequirements/read', null);
+      validateRequirements(requirements);
+      this.#policy = evaluateRuntimePolicy(config, requirements, this.#mockEvidence);
+      const thread = await this.transport.request('thread/start', { cwd, ephemeral: true, approvalPolicy: 'never', approvalsReviewer: 'user', sandbox: 'read-only', model: 'mock', modelProvider: 'mock' });
+      validateEffectiveThread(thread, cwd);
       identity(thread.thread.id); this.#thread = thread.thread.id;
       if (this.#connection !== 'connected') throw new Error('Managed connection unavailable.');
+      this.#policy.effectiveThread = 'verified-provider-report';
       this.#state = 'ready';
       this.#refresh(); await this.flush();
-    } catch { await this.transport.stop(); await this.#writes; throw new Error('Managed initialization failed.'); }
+    } catch { await this.#stopTransport(); throw new Error('Managed initialization failed.'); }
   }
   async sendOneTurn(prompt: Buffer, authorized: boolean): Promise<void> {
-    if (authorized !== true || this.#used || this.#state !== 'ready') throw new Error('Separate single-turn authorization is required.');
+    if (authorized !== true || this.#used || this.#state !== 'ready' || this.#policy?.effectiveThread !== 'verified-provider-report') throw new Error('Separate single-turn authorization is required.');
     // Buffer input is required so callers can read bounded stdin, never process arguments.
     if (!Buffer.isBuffer(prompt) || !prompt.length || prompt.length > 8_192 || !isUtf8(prompt)) throw new Error('Invalid managed prompt.');
     this.#used = true; this.#state = 'turn-pending'; this.#outcome = 'turn-pending';
     try {
       this.#refresh(); await this.flush();
       if (this.#connection !== 'connected') throw new Error('Managed connection unavailable.');
+      // Recheck supported evidence before submission; no automatic policy repair or retry.
+      const config = await this.transport.request('config/read', { cwd: this.#cwd, includeLayers: true });
+      validateResolvedConfig(config);
+      const requirements = await this.transport.request('configRequirements/read', null);
+      const rechecked = evaluateRuntimePolicy(config, requirements, this.#mockEvidence);
+      if (rechecked.resolvedRevision !== this.#policy?.resolvedRevision) throw new Error('Managed runtime policy verification failed.');
       this.#submitted = true;
       const result = await this.transport.startTurn({ threadId: this.#thread, input: [{ type: 'text', text: prompt.toString('utf8'), text_elements: [] }] }, true);
       if (!object(result) || !object(result.turn) || typeof result.turn.id !== 'string') throw new Error('Invalid managed turn response.');
@@ -86,7 +104,7 @@ export class ManagedCapture {
       this.#refresh(); await this.flush();
     } catch {
       if (!terminal.has(this.#state)) { this.#state = 'unknown-outcome'; this.#outcome = 'unknown-outcome'; }
-      this.#refresh(); await this.transport.stop(); await this.#writes;
+      this.#refresh(); await this.#stopTransport();
       throw new Error('Managed turn outcome requires inspection.');
     }
   }
@@ -165,7 +183,7 @@ export class ManagedCapture {
   async interrupt(): Promise<void> {
     if (this.#state !== 'turn-running' || !this.#turn) throw new Error('No confirmed managed turn to interrupt.');
     try { await this.transport.request('turn/interrupt', { threadId: this.#thread, turnId: this.#turn }); }
-    catch { await this.transport.stop(); }
+    catch { await this.#stopTransport(); }
     // An acknowledgment is not confirmation of interruption; await turn/completed.
   }
   #stopping?: Promise<void>;
@@ -177,6 +195,11 @@ export class ManagedCapture {
     if (this.#state === 'turn-pending' || this.#state === 'turn-running') {
       this.#state = 'unknown-outcome'; this.#outcome = 'unknown-outcome';
     }
+    await this.#stopTransport();
+    this.#state = 'stopped'; this.#connection = 'stopped'; this.#refresh();
+    await this.flush();
+  }
+  async #stopTransport(): Promise<void> {
     try { await this.transport.stop(); }
     catch (error) {
       this.#connection = 'disconnected';
@@ -187,7 +210,8 @@ export class ManagedCapture {
       }
       throw error;
     }
-    this.#state = 'stopped'; this.#connection = 'stopped'; this.#refresh();
+    // Transport closure disables further callbacks before stop settles. Drain the
+    // disconnect publication and surface its sticky persistence failure.
     await this.flush();
   }
 }
