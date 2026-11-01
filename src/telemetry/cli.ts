@@ -19,8 +19,8 @@ async function notificationFromStdin(): Promise<Buffer> {
 }
 export async function contextCommand(root: string, args: string[]): Promise<void> {
   const [action, ...options] = args;
-  if (action !== 'status' && action !== 'ingest') throw new Error('Use context status or context ingest.');
-  const allowed = action === 'status' ? ['--project', '--session', '--thread'] :
+  if (!['status', 'ingest', 'run'].includes(action)) throw new Error('Use context status, context ingest or context run.');
+  const allowed = action === 'run' ? ['--project', '--agent', '--yes'] : action === 'status' ? ['--project', '--session', '--thread'] :
     ['--project', '--source', '--source-version', '--session', '--observed-at', '--sequence', '--yes'];
   const parsed = new Map<string, string>();
   for (let i = 0; i < options.length; i++) {
@@ -30,6 +30,11 @@ export async function contextCommand(root: string, args: string[]): Promise<void
     const value = options[++i];
     if (!value || value.startsWith('--')) throw new Error('Missing context option value.');
     parsed.set(key, value);
+  }
+  if (action === 'run') {
+    if (!parsed.has('--yes')) throw new Error('Managed capture initialization requires --yes.');
+    if (parsed.get('--agent') !== 'codex') throw new Error('Managed capture requires --agent codex.');
+    throw new Error('Managed real App Server execution is disabled in M2.2a. Mock foundation only; containment and effective process policy require validation. No process was started.');
   }
   if (action === 'ingest') {
     if (!parsed.has('--yes')) throw new Error('Telemetry ingestion requires explicit local opt-in with --yes.');
@@ -54,10 +59,10 @@ export async function contextCommand(root: string, args: string[]): Promise<void
   const now = Date.now();
   console.log(JSON.stringify({
     capability: 'supported', provider: 'codex', source: CODEX_SOURCE, sourceVersion: CODEX_VERSION,
-    state: !observations.length ? 'unavailable' : observations.every((item) => freshness(item.observedAt, now) === 'fresh') ? 'supported' : 'stale',
+    state: !observations.length ? 'unavailable' : observations.every((item) => (!item.managed || item.managed.connection === 'connected') && freshness(item.observedAt, now) === 'fresh') ? 'supported' : 'stale',
     liveCapture: false, staleAfterMs: STALE_AFTER_MS,
     contextUtilization: 'unknown', reason: 'The supported event does not establish active context-window occupancy. CLI hooks and VS Code telemetry capture are not implemented.',
-    observations: observations.map((item) => ({ ...item, availability: 'supported', freshness: freshness(item.observedAt, now),
+    observations: observations.map((item) => ({ ...item, availability: 'supported', freshness: item.managed && item.managed.connection !== 'connected' ? 'stale' : freshness(item.observedAt, now),
       advisory: evaluateThreshold(item, config.thresholds, now) })),
   }, null, 2));
 }

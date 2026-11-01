@@ -58,6 +58,7 @@ The tracked project receives `.contextbridge/config.json`, `.contextbridge/state
 | `memory add` / `memory list` | Implemented | Append and retrieve local structured, unverified memory |
 | `hooks install` / `hooks status` / `hooks uninstall` | Implemented for checked Codex CLI | Manage opt-in project-local structured capture |
 | `context status` / `context ingest` | Implemented for Codex App Server 0.166.0 events | Inspect independent local streams or explicitly import one stdin notification; no live capture |
+| `context run --agent codex --yes` | Prepared; real execution disabled | Report the M2.2a mock-only boundary without launching a provider |
 | `verify` | Implemented | Check latest snapshot content integrity (SHA-256) |
 | `doctor` | Implemented | Detect local Node, Git and agent CLI executables |
 | `next --agent codex` | Implemented | Start a fresh interactive Codex session from the latest verified checkpoint |
@@ -120,6 +121,12 @@ contextbridge context status --project /path/to/project --session capture-1 --th
 Status reports `unavailable`, `supported`, or `stale` and lists independent streams with source, version, provenance, and freshness. Records become stale at five minutes; replays do not renew their age. Token totals and latest reports are snapshots, never added across notifications or sessions. The supported event does not establish active context occupancy: utilization and threshold advisories stay `unknown`, even when a context-window size is present. Neither `total.totalTokens / modelContextWindow` nor `last.totalTokens / modelContextWindow` is displayed as a percentage.
 
 Only bounded numeric records and hashed correlation identifiers are stored in `.contextbridge/telemetry/`, independently of memory and checkpoints. Normal use creates no telemetry store. Existing privacy configuration stays unchanged; `--yes` authorizes a single local import without enabling background or remote telemetry. See [Context telemetry: contract, calculations, limits, and recovery](docs/CONTEXT_TELEMETRY.md) and the [M2.1 technical report](docs/M2_1_REPORT.md).
+
+## Managed App Server foundation (M2.2a)
+
+An internal bounded subprocess transport and capture state machine are tested against a local Node mock server. Separate initialization and exactly-one-turn authorization, content-free schema-2 observations, explicit lifecycle snapshots, and compatibility with M2.1 imports are implemented. `context run --agent codex --project PATH --yes` deliberately exits with an unsupported message: **real execution remains disabled on every platform** pending process containment, process-local policy verification, and lifecycle persistence independent of usage. No real model call is made, and `--yes` does not authorize a turn.
+
+See [supported contracts, limits, and M2.2b prerequisites](docs/MANAGED_APP_SERVER.md) and the [implementation report](docs/M2_2A_REPORT.md). Context occupancy, automatic rollover, and attachment to existing CLI/IDE sessions remain unavailable.
 
 ## Assisted Codex handoff
 

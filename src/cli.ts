@@ -38,6 +38,7 @@ const HELP = `ContextBridge CLI (foundation preview)\n\n` +
   `Hooks: contextbridge hooks install|status|uninstall --agent codex [--project PATH]\n` +
   `       install requires --yes (explicit opt-in), or use --dry-run; uninstall supports --dry-run.\n` +
   `       Review installed hook definitions in Codex /hooks before use.\n` +
+  `Managed: contextbridge context run --agent codex --project PATH --yes (disabled; mock foundation only)\n` +
   `Context: contextbridge context status [--project PATH] [--session ID --thread ID]\n` +
   `         contextbridge context ingest --source codex-app-server --source-version 0.166.0\n` +
   `           --session ID --observed-at UTC_ISO_TIMESTAMP --sequence INTEGER --yes [--project PATH]\n` +

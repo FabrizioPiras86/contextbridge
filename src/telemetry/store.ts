@@ -74,8 +74,8 @@ export async function listTelemetry(root: string): Promise<TelemetryObservation[
   return readStore(await telemetryDir(root));
 }
 function sameReport(left: TelemetryObservation, right: TelemetryObservation): boolean {
-  return digestOf([left.turnId, left.cumulative, left.latest, left.modelContextWindow]) ===
-    digestOf([right.turnId, right.cumulative, right.latest, right.modelContextWindow]);
+  return digestOf([left.turnId, left.cumulative, left.latest, left.modelContextWindow, left.managed]) ===
+    digestOf([right.turnId, right.cumulative, right.latest, right.modelContextWindow, right.managed]);
 }
 export async function ingestTelemetry(root: string, observation: TelemetryObservation, optIn: boolean, now = Date.now()): Promise<'stored' | 'duplicate' | 'out-of-order'> {
   if (optIn !== true) throw new Error('Telemetry ingestion requires explicit local opt-in with --yes.');
