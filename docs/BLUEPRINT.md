@@ -122,7 +122,13 @@ Snapshot replacements must be atomic. Journal writes use append-only records, ex
 
 A token usage figure is not the same as context-window occupancy. Adapters must preserve the distinction between total usage, current context, prompt cache statistics, and actual occupancy. The threshold engine must not infer a reliable percentage from cumulative token expenditure. Where an authoritative occupancy metric is missing, use `unknown` and safe alternative triggers such as explicit user requests or supported compaction events.
 
-The initial threshold proposal is warning 60%, handoff preparation 75%, and safety 90%, configurable per agent/model. These values are hypotheses to benchmark, not universal optimums.
+The initial threshold proposal is warning 60%, handoff preparation 75%, and safety 90%, configurable in project configuration. These values are hypotheses to benchmark, not universal optimums.
+
+M2.1 implements a provider-neutral version-1 observation model, exact integer advisory comparisons, and explicit local import of Codex App Server 0.166.0 `thread/tokenUsage/updated` notifications. The adapter maps cumulative and latest usage separately; it never derives active occupancy from either. The current adapter always records `context.kind: unknown`, so no imported Codex event triggers a threshold. The generic evaluator requires a fresh, semantically verified active-context measurement; there is no production adapter producing one yet. It has no side effects or session control.
+
+Telemetry lives in a separate bounded atomic store under `.contextbridge/telemetry/`, never in the semantic journal, checkpoint digest, handoff, or launch prompt. Source, version, hashed capture/thread/turn identities, timestamp, caller-supplied ordering, numeric counters, and explicit provenance accompany each observation. Local imports have a verified schema but unverified origin and observation metadata. Missing context-window sizes remain null. Latest-state replacement handles declining counts without assuming monotonic usage, successful completion, or compaction. Streams are never aggregated. Status never chooses a current thread implicitly.
+
+Input and storage bounds, opt-in commands, freshness, replay behavior, numeric consistency rules, recovery limitations, research sources, and the unavailable CLI/VS Code live integrations are specified in [CONTEXT_TELEMETRY.md](CONTEXT_TELEMETRY.md). [M2_1_REPORT.md](M2_1_REPORT.md) records implementation and validation evidence. Continuous capture and exact occupancy remain future work.
 
 ## 7. Security
 
@@ -201,4 +207,4 @@ The test suite covers portable Windows/POSIX path rules on every host and uses p
 
 `bin/contextbridge-hook.mjs` supervises a bounded stdin/storage worker in `src/hooks/runner.ts`. Stable IDs permit replay after a partially completed block, while every append retains the M1.1 lock and recovery rules. Advisory output reports capture/recovery outcomes and never requests a provider continuation. Capture is best effort: concurrent writers, a timeout, or a stale lock can prevent delivery. The separate watchdog may terminate during append, so existing manual lock recovery remains necessary.
 
-See [CODEX_HOOKS.md](CODEX_HOOKS.md) for exact schemas, limits, compatibility evidence, installation recovery, Windows command constraints, and manual CLI/IDE verification. CI uses mocked payloads and capabilities without authentication or network. CLI capability detection is confirmed locally; live authenticated delivery and this adapter's VS Code integration are not verified.
+See [CODEX_HOOKS.md](CODEX_HOOKS.md) for exact schemas, limits, compatibility evidence, installation recovery, Windows command constraints, and manual CLI/IDE verification. CI uses mocked payloads and capabilities without authentication or network. CLI capability detection is confirmed locally. The project owner reports completed authenticated CLI and VS Code M1.2 smoke tests; this is owner-reported evidence and does not establish token telemetry availability.

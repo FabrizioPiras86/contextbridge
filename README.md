@@ -4,7 +4,7 @@
 
 ContextBridge is an open-source project intended to help developers preserve actionable project context when moving between fresh AI coding sessions. Its first assisted integration supports **OpenAI Codex**; a **Claude Code** adapter is planned.
 
-> **Project status: foundation preview (v0.0.1).** The CLI supports an append-only structured project memory journal. It can initialize local memory, create manually annotated checkpoints, generate a compact handoff file, and verify snapshot checksums. It can start a fresh interactive Codex CLI session from a verified checkpoint with `next --agent codex`. It supports **opt-in Codex hook capture of explicitly labeled memory blocks**. It **does not monitor agent token usage, extract a full conversation, or perform automatic rollover**. Claude Code handoff and managed integrations remain roadmap items.
+> **Project status: foundation preview (v0.0.1).** The CLI supports an append-only structured project memory journal. It can initialize local memory, create manually annotated checkpoints, generate a compact handoff file, and verify snapshot checksums. It can start a fresh interactive Codex CLI session from a verified checkpoint with `next --agent codex`. It supports **opt-in Codex hook capture of explicitly labeled memory blocks** and **explicit local import of version-checked App Server token usage events**. Active context occupancy remains unknown for that event. It **does not capture live token telemetry, extract a full conversation, or perform automatic rollover**. Claude Code handoff and managed integrations remain roadmap items.
 
 ## Design principles
 
@@ -57,6 +57,7 @@ The tracked project receives `.contextbridge/config.json`, `.contextbridge/state
 | `checkpoint` | Implemented | Create snapshot from explicit work-state arguments and Git metadata |
 | `memory add` / `memory list` | Implemented | Append and retrieve local structured, unverified memory |
 | `hooks install` / `hooks status` / `hooks uninstall` | Implemented for checked Codex CLI | Manage opt-in project-local structured capture |
+| `context status` / `context ingest` | Implemented for Codex App Server 0.166.0 events | Inspect independent local streams or explicitly import one stdin notification; no live capture |
 | `verify` | Implemented | Check latest snapshot content integrity (SHA-256) |
 | `doctor` | Implemented | Detect local Node, Git and agent CLI executables |
 | `next --agent codex` | Implemented | Start a fresh interactive Codex session from the latest verified checkpoint |
@@ -101,7 +102,24 @@ contextbridge hooks uninstall --agent codex --project /path/to/project
 
 Only a final response containing one `contextbridge-memory` JSON block produces semantic memory. Supported labels cover reported decisions, completed/pending tasks, blockers, next steps, and metadata. Ordinary prose saves nothing. All captured claims remain unverified and agent-reported. There are no transcript/source reads or extra model calls. Input size, execution time, and extraction count are bounded; stable delivery IDs prevent replay duplicates. Installation preserves other hooks and settings and never changes global settings or hook trust.
 
-See [Codex hooks: contract, compatibility, recovery, and manual smoke test](docs/CODEX_HOOKS.md). CLI capabilities were inspected locally; authenticated delivery and this adapter's VS Code extension behavior remain unverified. Other Codex versions fail installation until reviewed. Windows requires Node on PATH and a directly executable Codex binary; shell-wrapper-only installations and paths with shell expansions are rejected.
+See [Codex hooks: contract, compatibility, recovery, and manual smoke test](docs/CODEX_HOOKS.md). The project owner reports completed authenticated CLI and VS Code memory-capture smoke tests for M1.2; these are separate from token telemetry and were not rerun during M2.1. Other Codex versions fail installation until reviewed. Windows requires Node on PATH and a directly executable Codex binary; shell-wrapper-only installations and paths with shell expansions are rejected.
+
+## Local context telemetry (M2.1)
+
+```bash
+contextbridge context status --project /path/to/project
+contextbridge context ingest --project /path/to/project \
+  --source codex-app-server --source-version 0.166.0 \
+  --session capture-1 --observed-at 2026-11-01T10:00:00.000Z --sequence 1 --yes \
+  < token-usage-notification.json
+contextbridge context status --project /path/to/project --session capture-1 --thread THREAD_ID
+```
+
+`ingest` accepts exactly one supported notification on stdin, with explicit consent for that import. Supply its original observation time and a positive, increasing per-thread sequence from your capture process. `--session` identifies your local acquisition epoch, not a provider-authenticated session. Neither time nor ordering can be recovered from this Codex event; import metadata and origin remain unverified. The file above must contain only the event, not a conversation or full transport log. No collector, provider process, listener, extension interception, or network request is started.
+
+Status reports `unavailable`, `supported`, or `stale` and lists independent streams with source, version, provenance, and freshness. Records become stale at five minutes; replays do not renew their age. Token totals and latest reports are snapshots, never added across notifications or sessions. The supported event does not establish active context occupancy: utilization and threshold advisories stay `unknown`, even when a context-window size is present. Neither `total.totalTokens / modelContextWindow` nor `last.totalTokens / modelContextWindow` is displayed as a percentage.
+
+Only bounded numeric records and hashed correlation identifiers are stored in `.contextbridge/telemetry/`, independently of memory and checkpoints. Normal use creates no telemetry store. Existing privacy configuration stays unchanged; `--yes` authorizes a single local import without enabling background or remote telemetry. See [Context telemetry: contract, calculations, limits, and recovery](docs/CONTEXT_TELEMETRY.md) and the [M2.1 technical report](docs/M2_1_REPORT.md).
 
 ## Assisted Codex handoff
 
@@ -126,6 +144,7 @@ The preview does not parse or archive conversations. Do not store credentials or
 - [Architecture and execution blueprint](docs/BLUEPRINT.md)
 - [Implementation roadmap](docs/ROADMAP.md)
 - [Codex capture integration and manual verification](docs/CODEX_HOOKS.md)
+- [Local context telemetry](docs/CONTEXT_TELEMETRY.md)
 - [Language policy](docs/LANGUAGE_POLICY.md)
 - [Contributing](CONTRIBUTING.md)
 - [Security policy](SECURITY.md)

@@ -8,7 +8,9 @@ The [official hook reference](https://learn.chatgpt.com/docs/hooks) (also reache
 
 Local inspection found `codex-cli 0.166.0`, `hooks stable true`, and a hook-trust option in CLI help. No trust bypass was used. This implementation deliberately accepts only that exact version with hooks enabled; unknown older or newer versions fail installation until their contract is checked. The probe uses the selected project as cwd, so project configuration participates in feature detection. It does not modify settings.
 
-The [official glossary](https://learn.chatgpt.com/docs/glossary) lists hooks for CLI and IDE. This is documented availability, not verification of this adapter in an installed VS Code extension. Extension version, trust workflow, and delivery remain unverified here. No authenticated live CLI or IDE conversation was run. Mock tests establish adapter behavior, not provider delivery. Cloud and remote execution are outside this milestone.
+The [official glossary](https://learn.chatgpt.com/docs/glossary) lists hooks for CLI and IDE. The project owner subsequently reported successful authenticated CLI and adapter-specific VS Code memory-capture smoke tests for M1.2. That owner-reported result updates the roadmap; the tests were not rerun during M2.1, and extension version/trust details have not been independently recorded here. Mock tests establish adapter behavior, not provider delivery. Cloud and remote execution are outside this milestone.
+
+The documented `SessionStart` and `Stop` inputs used here contain no trustworthy token-usage or context-occupancy fields. M2.1 does not repurpose assistant text, transcript paths, model names, or hook lifecycle events into token estimates. Hook capture remains semantic memory only. See [local App Server telemetry](CONTEXT_TELEMETRY.md) for the separate explicit import route; neither a working IDE hook nor App Server protocol availability means ContextBridge can monitor an existing VS Code session.
 
 ## Install, inspect, and remove
 
