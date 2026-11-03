@@ -126,3 +126,7 @@ The [durable managed lifecycle foundation](MANAGED_APP_SERVER.md#durable-publica
 ## M2.2b.3 mock policy admission
 
 Managed mock acquisitions now require strict version-pinned configuration and administrative requirement checks before thread creation, followed by effective thread verification before ready. Independent offline-harness assertions cover properties the protocol cannot establish; they never clear production eligibility. Configuration and requirement responses are discarded without logging or persistence. The lifecycle/usage store and imported observations remain unchanged. Failure retains conservative acquisition evidence and blocks model submission. Separately authorized mock turns revalidate supported policy evidence after the durable pending barrier. See the [policy report](M2_2B_3_REPORT.md). Real execution, active occupancy and automatic rollover remain unavailable.
+
+## M2.2b.4 offline startup assessment
+
+The separate [pre-spawn model](M2_2B_4_REPORT.md) has no telemetry or lifecycle storage path. It accepts fixed categories rather than raw environment/configuration/credential data and never turns mock completeness into runtime permission. No assessment is persisted or used as restart authority. Startup exporter/network/write prevention must exist before process creation; later config/read and configRequirements/read responses cannot retroactively enforce it. Existing import formats, privacy defaults and durable publication remain unchanged.

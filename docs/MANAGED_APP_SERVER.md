@@ -1,4 +1,4 @@
-# Managed App Server foundation (M2.2a / M2.2b.1 / M2.2b.2 / M2.2b.3)
+# Managed App Server foundation (M2.2a / M2.2b.1 / M2.2b.2 / M2.2b.3 / M2.2b.4)
 
 Date: 2026-11-01. Baseline: installed `codex-cli 0.166.0`. This is a **mock-tested partial foundation**, not an authenticated integration or a production process launcher. Real execution is disabled on every platform. No real App Server was started during implementation.
 
@@ -93,7 +93,17 @@ The library installs no global signal, exit or exception handlers. The applicati
 
 Windows subprocess execution fails before spawn at both transport and ownership layers. Terminating one Windows PID cannot establish descendant cleanup. A future native launcher should create a non-inheritable Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, create the child suspended, assign it before resuming, prohibit breakaway, and fail closed on assignment/policy failure. Handle ownership, nesting, inherited handles and crash cleanup require native implementation and Windows tests. No taskkill, enumeration, native launcher or watchdog is introduced here.
 
-POSIX fixtures target macOS and Linux. The supplied M2.2b.3 request reports green macOS/Linux/Windows CI for the merged M2.2b.2 baseline; this is user-provided evidence. M2.2b.3 requires its own CI validation; its local results are separate. The Windows suite skips actual POSIX execution and retains portable protocol/storage tests and its disabled execution assertion. See [M2.2b.2 report](M2_2B_2_REPORT.md) for test evidence, parent-failure distinctions and concrete future containment designs.
+POSIX fixtures target macOS and Linux. The supplied requests report green baseline CI and successful macOS/Ubuntu/Windows CI for merged M2.2b.3 main; this is user-provided evidence, separate from local results. M2.2b.4 requires its own CI validation. The Windows suite skips actual POSIX execution and retains portable protocol/storage tests and its disabled execution assertion. See [M2.2b.2 report](M2_2B_2_REPORT.md) for test evidence, parent-failure distinctions and concrete future containment designs.
+
+## Offline pre-spawn assessment (M2.2b.4)
+
+`assessPreSpawn` in `src/managed/pre-spawn.ts` is a pure internal planning API, disconnected from process creation. Its typed input has exactly scope, sourceVersion, platform and seventeen fixed control statuses. Only the pinned 0.166.0 model and explicit darwin/linux offline plans can complete; Windows and unknown platforms block. Missing/unknown fields, incomplete evidence, conflicts and unsupported statuses block. No executable arguments, configuration keys, paths, environment values or credential material are accepted as evidence. External input decoding would require independent bounds; no external ingress is implemented.
+
+`offline-model-complete` means every required category has a positive mock claim. The assessment explicitly labels all input as unverified claims and all real controls as unverified, including those with positive mock claims. Every result has spawnAuthorized=false and productionEligible=false. A caller can fabricate the scope/status strings; they are not attestations or trusted capabilities. No current launcher, capture or CLI consumes this assessment, and no evidence file grants launch/restart permission. This intentionally models the boundary without changing existing mock lifecycle/cleanup behavior.
+
+Results contain fixed diagnostics, bounded control names and no raw input; output and arrays are frozen. Cancellation and selection failures return blocked results with no echoed reason/error content. No policy repair, fallback, retry, global configuration change, environment discovery, credential access, persistence or networking occurs. Ordinary accessors/inherited fields are rejected; arbitrary executable JavaScript proxies are outside an in-process security boundary.
+
+Before a future real executable starts, a reviewed boundary must constrain executable identity, explicit environment and home discovery, every configuration layer and integration, credential access, filesystem writes, network and descendant/parent-failure containment. initialize and subsequent config/read/configRequirements/read happen after startup. They can support later rejection but cannot undo hooks, exporter connections, credential refresh or writes that already happened. Read-only thread sandbox and ephemeral thread mode do not prove startup isolation. The [M2.2b.4 report](M2_2B_4_REPORT.md) separates pinned-schema evidence, inherited documentation, offline tests and unverified OS/runtime proposals. Real execution stays disabled on every platform.
 
 ## Required M2.2b prerequisites and live smoke test
 

@@ -136,7 +136,21 @@ See [M2.2b.2 report](M2_2B_2_REPORT.md) for exact guarantees, validation and rem
 - [x] Durable acquisition, policy reads, effective thread verification and ready ordering; revalidation before a separately authorized turn.
 - [x] Negative mock cases for missing/ambiguous/conflicting evidence, unsafe policies, integrations, protocol failures, privacy and cleanup errors.
 - [x] Document process-local isolation candidates and unsupported guarantees without changing global configuration.
-- [ ] Run this revision's expanded suite in macOS/Linux/Windows CI; baseline matrix evidence does not validate new changes.
+- [x] Merged M2.2b.3 main revision validated across macOS, Ubuntu and Windows CI (user-provided evidence in the M2.2b.4 request; not independently rerun here).
 - [ ] Prove startup-side-effect isolation, complete capability restrictions, stronger OS containment and authenticated enforcement before enabling any real launcher.
 
 See [M2.2b.3 report](M2_2B_3_REPORT.md). Real App Server execution remains disabled.
+
+## M2.2b.4 — Pre-spawn isolation and startup security (offline model)
+
+- [x] Document environment/home/configuration, integrations, credentials, startup side effects and containment trust boundaries.
+- [x] Pure, closed, version-pinned offline assessment with explicit platform handling and fixed diagnostics.
+- [x] Missing, unknown, conflicting or unsupported evidence blocks model completion; runtime controls always remain unverified.
+- [x] Immutable assessments always retain spawnAuthorized=false and productionEligible=false; no launcher or persistence integration.
+- [x] Deterministic positive/negative evidence, cancellation, failure and privacy tests; existing lifecycle/cleanup regression coverage retained.
+- [x] Separate pre-creation requirements from post-start config/requirements observations and analyze OS containment feasibility.
+- [ ] Validate this milestone in the macOS/Ubuntu/Windows CI matrix; local results do not establish remote CI success.
+- [ ] M2.2b.5 candidate: native containment feasibility prototype using benign offline fixtures, including admission before execution and parent hard failure.
+- [ ] Reviewed version-specific startup recipe, credential continuity and separately authorized runtime enforcement validation; real execution remains disabled.
+
+See [M2.2b.4 report](M2_2B_4_REPORT.md). No mock evidence establishes real-runtime enforcement.
