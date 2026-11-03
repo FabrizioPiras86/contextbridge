@@ -149,8 +149,23 @@ See [M2.2b.3 report](M2_2B_3_REPORT.md). Real App Server execution remains disab
 - [x] Immutable assessments always retain spawnAuthorized=false and productionEligible=false; no launcher or persistence integration.
 - [x] Deterministic positive/negative evidence, cancellation, failure and privacy tests; existing lifecycle/cleanup regression coverage retained.
 - [x] Separate pre-creation requirements from post-start config/requirements observations and analyze OS containment feasibility.
-- [ ] Validate this milestone in the macOS/Ubuntu/Windows CI matrix; local results do not establish remote CI success.
-- [ ] M2.2b.5 candidate: native containment feasibility prototype using benign offline fixtures, including admission before execution and parent hard failure.
+- [x] Merged M2.2b.4 baseline passed macOS/Ubuntu/Windows CI (user-provided evidence in the M2.2b.5 request; not queried here).
+- [x] M2.2b.5: native feasibility study and bounded macOS admission experiment using benign offline fixtures; complete containment remains unproven.
 - [ ] Reviewed version-specific startup recipe, credential continuity and separately authorized runtime enforcement validation; real execution remains disabled.
 
 See [M2.2b.4 report](M2_2B_4_REPORT.md). No mock evidence establishes real-runtime enforcement.
+
+## M2.2b.5 — Native containment feasibility (offline study and bounded experiment)
+
+- [x] Review local documented macOS suspended spawn, wait/reaping, group/session, kqueue, launchd and sandbox mechanisms without network access.
+- [x] Test native stopped-child admission before workload entry, release and pre-release cancellation independently of the managed launcher.
+- [x] Exercise bounded direct-child termination/escalation, repeated stops, revoked ownership, sticky uncertainty and privacy-safe fixed diagnostics.
+- [x] Demonstrate descendants escaping through new sessions/groups and children surviving supervisor SIGKILL/hard exit; assert missing guarantees.
+- [x] Retain all M2.2b.1–4 behavior, authorization flags and disabled real managed execution; do not weaken existing process cleanup.
+- [x] Assess Linux delegated cgroup v2 and Windows Job Objects separately as unimplemented, locally unvalidated proposals.
+- [ ] Validate M2.2b.5 in macOS/Ubuntu/Windows CI; native experiment only executes on macOS.
+- [ ] Establish complete macOS descendant/lifetime ownership and pre-release filesystem/network isolation; reviewed primitives do not currently satisfy this gate.
+- [ ] Implement and independently validate Linux/Windows native mechanisms before considering platform eligibility; Windows execution stays disabled.
+- [ ] M2.2b.6 recommendation: investigate a macOS isolated-guest lifetime boundary with benign offline workloads and explicit host/broker, startup and controller-failure threats, or retain macOS as unsupported.
+
+See [M2.2b.5 report](M2_2B_5_REPORT.md). No production readiness, runtime credential continuity or real provider validation is claimed.
