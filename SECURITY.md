@@ -22,3 +22,7 @@ Real managed App Server execution remains disabled. The POSIX test transport own
 ## Mock runtime policy boundary
 
 Managed mock admission validates pinned config/requirements responses before thread creation and explicit effective thread sandbox/network/approval settings before ready. Independent test-harness isolation assertions are required for unsupported properties and never establish real-runtime safety. Missing or inconsistent evidence blocks admission; sensitive configuration is discarded without logging or persistence. Post-handshake checks cannot prevent startup side effects. Every policy assessment retains production eligibility disabled. See [M2.2b.3](docs/M2_2B_3_REPORT.md).
+
+## Offline pre-spawn assessment
+
+The separate M2.2b.4 model accepts only fixed offline evidence categories and returns immutable privacy-safe diagnostics. Input claims remain unverified, every real-runtime control remains unverified, and both spawn authorization and production eligibility are always false. It performs no discovery, environment capture, credential access, configuration repair, persistence or process creation. Empty environment, isolated home proposals, read-only thread sandbox and post-start policy reads do not establish complete startup filesystem/network or credential isolation. See [the startup threat model and platform limitations](docs/M2_2B_4_REPORT.md). Existing mock transport remains internal test infrastructure, not an approved real launcher.
