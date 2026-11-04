@@ -10,9 +10,13 @@ Do not supply credentials, authentication tokens, customer data, or sensitive te
 
 The starter records Git metadata, manually supplied work-state text, and snapshot integrity digests. It does not collect raw conversations or source file contents automatically. ContextBridge itself performs no network requests. The explicit `next --agent codex` command launches Codex, which may contact its configured provider and read project files under its own permission settings. The verified checkpoint is passed as an initial user prompt, not privileged instructions; its text may be visible in local process arguments. The mutable handoff file is not trusted as launch input.
 
+## Local package preview
+
+Local tarballs are built from a trusted checkout using Node's built-in type stripper, without external dependencies. An explicit package allowlist includes generated runtime JavaScript, launchers and Markdown documentation/templates; tests, native fixtures, account configuration and project state are excluded. Installed-package tests use disposable projects, an offline npm cache, empty npm user/global configuration and a controlled Codex mock. No real authentication or hook trust is exercised. Review `npm pack --dry-run --json` before distributing an artifact; checksums establish integrity, not publisher authenticity. See [release readiness](docs/V1_ASSISTED_RELEASE_REPORT.md).
+
 ## Reporting
 
-Until the public repository and security-contact process are established, do not open a public issue containing exploit details or secrets. Agree on a private security reporting channel with the project maintainers before publication.
+Until a private security-contact process is established, do not open a public issue containing exploit details or secrets. Agree on a private security reporting channel with the project maintainers before publication.
 
 ## Mock managed process boundary
 

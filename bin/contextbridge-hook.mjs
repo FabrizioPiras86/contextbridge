@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { existsSync } from 'node:fs';
 
 // A separate watchdog bounds stalled stdin, synchronous parsing, and storage work.
 // No provider is launched. The child inherits a recursion guard for any descendants.
 if (process.env.CONTEXTBRIDGE_HOOK_ACTIVE) {
   process.stdout.write('{}\n');
 } else {
-  const child = spawn(process.execPath, ['--experimental-strip-types',
-    fileURLToPath(new URL('../src/hooks/runner.ts', import.meta.url)), ...process.argv.slice(2)], {
+  const source = fileURLToPath(new URL('../src/hooks/runner.ts', import.meta.url));
+  const runtime = existsSync(source) ? ['--experimental-strip-types', source]
+    : [fileURLToPath(new URL('../dist/hooks/runner.js', import.meta.url))];
+  const child = spawn(process.execPath, [...runtime, ...process.argv.slice(2)], {
     env: { ...process.env, CONTEXTBRIDGE_HOOK_ACTIVE: '1' },
     stdio: ['pipe', 'pipe', 'ignore'], shell: false,
   });
