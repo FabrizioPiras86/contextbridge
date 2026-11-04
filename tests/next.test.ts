@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, mkdtemp, readFile, readdir, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join, resolve, toNamespacedPath } from 'node:path';
 import { initProject } from '../src/config.ts';
 import { createCheckpoint } from '../src/snapshot.ts';
 import { digestOf } from '../src/storage.ts';
@@ -16,8 +16,15 @@ async function assertSameDirectory(actual: string, expected: string): Promise<vo
   ]);
   assert.ok(actualStats.isDirectory(), `Expected a directory: ${actual}`);
   assert.ok(expectedStats.isDirectory(), `Expected a directory: ${expected}`);
-  // File identity is unchanged by Windows 8.3 names, path casing, or directory aliases.
-  // BigInt preserves the full file identifiers on every supported platform.
+  if (process.platform === 'win32') {
+    // Node 22.16 path stat can report different devices for a junction and its target.
+    // Resolve aliases before comparing paths in these case-insensitive Windows fixtures.
+    const [actualPath, expectedPath] = await Promise.all([realpath(actual), realpath(expected)]);
+    assert.equal(actualPath.toLowerCase(), expectedPath.toLowerCase(),
+      `Expected the same directory: ${actual} and ${expected}`);
+    return;
+  }
+  // Preserve full device and inode identity on POSIX, including directory aliases.
   assert.deepEqual(
     { dev: actualStats.dev, ino: actualStats.ino },
     { dev: expectedStats.dev, ino: expectedStats.ino },
@@ -37,6 +44,12 @@ test('directory identity accepts aliases and rejects a different directory', asy
   await symlink(target, alias, process.platform === 'win32' ? 'junction' : 'dir');
   await assertSameDirectory(target, target);
   await assertSameDirectory(alias, target);
+  if (process.platform === 'win32') {
+    await assertSameDirectory(join(base, 'PROJECT WITH SPACES'), target);
+    await assertSameDirectory(alias.replaceAll('\\', '/'), target);
+    await assertSameDirectory(toNamespacedPath(target), target);
+    await assertSameDirectory(toNamespacedPath(alias), target);
+  }
   await assert.rejects(assertSameDirectory(other, target), /Expected the same directory/);
 });
 
