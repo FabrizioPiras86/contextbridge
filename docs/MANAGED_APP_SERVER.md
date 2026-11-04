@@ -1,4 +1,4 @@
-# Managed App Server foundation (M2.2a / M2.2b.1 / M2.2b.2 / M2.2b.3 / M2.2b.4)
+# Managed App Server foundation (M2.2a / M2.2b.1 / M2.2b.2 / M2.2b.3 / M2.2b.4 / M2.2b.5)
 
 Date: 2026-11-01. Baseline: installed `codex-cli 0.166.0`. This is a **mock-tested partial foundation**, not an authenticated integration or a production process launcher. Real execution is disabled on every platform. No real App Server was started during implementation.
 
@@ -93,7 +93,7 @@ The library installs no global signal, exit or exception handlers. The applicati
 
 Windows subprocess execution fails before spawn at both transport and ownership layers. Terminating one Windows PID cannot establish descendant cleanup. A future native launcher should create a non-inheritable Job Object with `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`, create the child suspended, assign it before resuming, prohibit breakaway, and fail closed on assignment/policy failure. Handle ownership, nesting, inherited handles and crash cleanup require native implementation and Windows tests. No taskkill, enumeration, native launcher or watchdog is introduced here.
 
-POSIX fixtures target macOS and Linux. The supplied requests report green baseline CI and successful macOS/Ubuntu/Windows CI for merged M2.2b.3 main; this is user-provided evidence, separate from local results. M2.2b.4 requires its own CI validation. The Windows suite skips actual POSIX execution and retains portable protocol/storage tests and its disabled execution assertion. See [M2.2b.2 report](M2_2B_2_REPORT.md) for test evidence, parent-failure distinctions and concrete future containment designs.
+POSIX fixtures target macOS and Linux. The supplied M2.2b.5 request reports successful macOS/Ubuntu/Windows CI for merged M2.2b.4 main; this is user-provided evidence, separate from local results. M2.2b.5 requires its own CI validation. The Windows suite skips actual POSIX execution and retains portable protocol/storage tests and its disabled execution assertion. See [M2.2b.2 report](M2_2B_2_REPORT.md) for test evidence, parent-failure distinctions and concrete future containment designs.
 
 ## Offline pre-spawn assessment (M2.2b.4)
 
@@ -104,6 +104,14 @@ POSIX fixtures target macOS and Linux. The supplied requests report green baseli
 Results contain fixed diagnostics, bounded control names and no raw input; output and arrays are frozen. Cancellation and selection failures return blocked results with no echoed reason/error content. No policy repair, fallback, retry, global configuration change, environment discovery, credential access, persistence or networking occurs. Ordinary accessors/inherited fields are rejected; arbitrary executable JavaScript proxies are outside an in-process security boundary.
 
 Before a future real executable starts, a reviewed boundary must constrain executable identity, explicit environment and home discovery, every configuration layer and integration, credential access, filesystem writes, network and descendant/parent-failure containment. initialize and subsequent config/read/configRequirements/read happen after startup. They can support later rejection but cannot undo hooks, exporter connections, credential refresh or writes that already happened. Read-only thread sandbox and ephemeral thread mode do not prove startup isolation. The [M2.2b.4 report](M2_2B_4_REPORT.md) separates pinned-schema evidence, inherited documentation, offline tests and unverified OS/runtime proposals. Real execution stays disabled on every platform.
+
+## Native containment feasibility (M2.2b.5; offline only)
+
+Local macOS manuals document `POSIX_SPAWN_START_SUSPENDED` before user-space execution, descriptor closure through `POSIX_SPAWN_CLOEXEC_DEFAULT`, and stopped/exit status through `waitpid`. A disposable C fixture exercises those controls without starting a provider. Tests compile it using `/usr/bin/clang` and require macOS Command Line Tools; compilation failure fails the suite. Other hosts skip this macOS experiment, and its non-Apple C branch returns unsupported (78) without spawning anything. No fallback native launcher, dependency or production integration is added.
+
+The native experiment owns one direct child with default SIGCHLD disposition and a single reaper. Before reaping, that direct child's PID remains allocated; after reaping or uncertain wait/signal results, signaling is forbidden. The experiment never signals a group or accepts a saved PID. Bounded direct-child cleanup is explicitly not all-descendant cleanup: tests show `setsid`/`setpgid` descendants surviving it, and a running child surviving supervisor SIGKILL/hard exit. Concurrent/repeated stop bytes serialize at the fixture controller; existing managed concurrent-stop promises and sticky uncertainty behavior remain unchanged. Fault-injected ownership loss stays unconfirmed even after the fixture exits voluntarily.
+
+A private controller pipe permits cleanup on EOF only while the native supervisor survives. SIGTERM/SIGINT are handled in this test executable, not installed in library code. There is no safe suspended-child expiry if the supervisor is killed before release; that case remains an explicit untested blocker. The experiment does not establish filesystem/network restrictions before release and permits startup writes after release. Both authorization flags remain false in every diagnostic. Read [M2.2b.5](M2_2B_5_REPORT.md) for local evidence, tested limits, separate Linux/Windows proposals and the recommended next milestone.
 
 ## Required M2.2b prerequisites and live smoke test
 
