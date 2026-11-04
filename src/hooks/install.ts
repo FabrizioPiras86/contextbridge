@@ -6,6 +6,7 @@ import { lstat, mkdir, open, readFile, realpath, unlink } from 'node:fs/promises
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isDeepStrictEqual } from 'node:util';
+import { ownsLock } from '../lock.ts';
 import { loadConfig } from '../config.ts';
 import { writeJsonAtomic } from '../storage.ts';
 
@@ -163,11 +164,11 @@ export async function manageHooks(project: string, action: 'install' | 'uninstal
   } finally {
     if (lock) {
       try { await lock.close(); } finally {
-        const current = await lstat(lockPath, { bigint: true }).catch((error: NodeJS.ErrnoException) => {
-          if (error.code !== 'ENOENT') throw error;
-          return undefined;
-        });
-        if (identity && current?.isFile() && !current.isSymbolicLink() && current.dev === identity.dev && current.ino === identity.ino) await unlink(lockPath);
+        try {
+          if (await ownsLock(lockPath, identity)) await unlink(lockPath);
+        } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
+        }
       }
     }
   }

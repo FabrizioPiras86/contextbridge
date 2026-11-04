@@ -27,6 +27,8 @@ contextbridge hooks uninstall --agent codex --project /path/to/project
 
 From this checkout, replace `contextbridge` with `node /absolute/path/to/contextbridge/bin/contextbridge.mjs`.
 
+For a local tarball installation, run `npm exec --offline -- contextbridge` from the installation directory. The tarball includes both the hook supervisor and its JavaScript worker; installation needs no scripts or compiler. Hook commands retain absolute installation paths, so uninstall hooks before moving or replacing that directory. Package installation itself never installs provider hooks. See [V1 Assisted installation](../README.md#install-the-local-preview).
+
 `--yes` explicitly opts into local capture; dry-run writes nothing. Installing is separate from provider trust: inspect and trust the definitions using Codex `/hooks`, then start a fresh session. Installation does not bypass hook trust or grant permissions. Status reports local configuration and compatibility; it cannot establish runtime trust or admin policy. Hooks may be disabled by policy even when local configuration is installed.
 
 The installer adds one owned group each for `SessionStart` and `Stop` in project-local `.codex/hooks.json`. It retains other JSON keys and hooks, including later additions. JSON formatting may change; `config.toml`, global settings, permissions, AGENTS.md, and existing journal/snapshot files are untouched. The project-local hook file may be tracked by Git: review it before sharing because its commands contain machine-specific absolute paths. Do not copy hook definitions blindly to another machine.

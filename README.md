@@ -4,7 +4,7 @@
 
 ContextBridge is an open-source project intended to help developers preserve actionable project context when moving between fresh AI coding sessions. Its first assisted integration supports **OpenAI Codex**; a **Claude Code** adapter is planned.
 
-> **Project status: foundation preview (v0.0.1).** The CLI supports an append-only structured project memory journal. It can initialize local memory, create manually annotated checkpoints, generate a compact handoff file, and verify snapshot checksums. It can start a fresh interactive Codex CLI session from a verified checkpoint with `next --agent codex`. It supports **opt-in Codex hook capture of explicitly labeled memory blocks** and **explicit local import of version-checked App Server token usage events**. Active context occupancy remains unknown for that event. It **does not capture live token telemetry, extract a full conversation, or perform automatic rollover**. Claude Code handoff and managed integrations remain roadmap items.
+> **Project status: V1 Assisted preview (package version 0.0.1; private, local distribution only).** The CLI supports an append-only structured project memory journal. It can initialize local memory, create manually annotated checkpoints, generate a compact handoff file, and verify snapshot checksums. It can start a fresh interactive Codex CLI session from a verified checkpoint with `next --agent codex`. It supports **opt-in Codex hook capture of explicitly labeled memory blocks** and **explicit local import of version-checked App Server token usage events**. Active context occupancy remains unknown for that event. It **does not capture live token telemetry, extract a full conversation, or perform automatic rollover**. Claude Code handoff and managed integrations remain roadmap items.
 
 ## Design principles
 
@@ -17,20 +17,52 @@ ContextBridge is an open-source project intended to help developers preserve act
 
 ## Prerequisites
 
-- Node.js 22.16 or later (experimental built-in TypeScript stripping for the foundation preview)
+- Supported preview runtime: Node.js 22.16+ within the 22.x line. Package metadata permits newer majors, but this milestone validates Node 22 only.
+- Checkout execution uses experimental built-in TypeScript stripping; installed tarballs contain JavaScript.
 - Git is optional for the foundation CLI, but recommended.
 - No npm dependencies are required to run this preview.
 
-## Quick start
+## Install the local preview
+
+There is no published npm release for this milestone. Do not install an unrelated registry package with the same name. From a trusted checkout, create an artifact directory and pack:
+
+```bash
+cd /path/to/contextbridge
+npm test
+# Create this directory first; choose an absolute path outside the checkout.
+npm pack --pack-destination /absolute/path/to/artifacts
+```
+
+`npm pack` runs the dependency-free `prepack` build using Node's built-in type stripper. This is necessary because Node refuses TypeScript stripping under `node_modules`. The tarball includes both launchers, generated JavaScript, integration templates, documentation and license. It excludes source TypeScript, tests, native fixtures, build scripts, local state and account configuration. No dependencies are downloaded by the build. `private: true` remains set; packing does not publish anything.
+
+Install the tarball in a disposable tool directory first:
+
+```bash
+cd /path/to/disposable-tool-directory
+npm install --offline --ignore-scripts --no-save --package-lock=false --no-audit --no-fund /absolute/path/to/artifacts/contextbridge-0.0.1.tgz
+npm exec --offline -- contextbridge --help
+npm exec --offline -- contextbridge init --agent codex --project /path/to/your/project
+```
+
+Run later commands from that tool directory using `npm exec --offline -- contextbridge` in place of `contextbridge`. The installation needs no lifecycle scripts or build tools. Keep the installation at a stable path if you opt into hooks; uninstall hooks before moving or replacing it. Local installation creates `node_modules` in the selected tool directory. Never use a real project for automated smoke tests.
+
+For contributor checks, `npm run test:package` packs twice, checks reproducibility on the same Node version, installs offline into a temporary directory and exercises the installed runtime with a controlled mock Codex executable. It is also included in `npm test` and the macOS/Ubuntu/Windows CI matrix. No authenticated session is used. See [release evidence and blockers](docs/V1_ASSISTED_RELEASE_REPORT.md).
+
+## Use from a checkout
 
 ```bash
 # Clone or extract this repository.
-cd contextbridge-starter
+cd /path/to/contextbridge
 npm test
 node bin/contextbridge.mjs --help
 
 # Initialize the repository you want to track.
 node bin/contextbridge.mjs init --project /path/to/your/project --agent both
+
+# Record an explicit claim; this remains unverified.
+node bin/contextbridge.mjs memory add --project /path/to/your/project \
+  --type decision --text "Use stateless authentication"
+node bin/contextbridge.mjs memory list --project /path/to/your/project
 
 # Create a manual, evidence-labeled checkpoint.
 node bin/contextbridge.mjs checkpoint \
@@ -46,7 +78,15 @@ node bin/contextbridge.mjs status --project /path/to/your/project
 node bin/contextbridge.mjs next --agent codex --project /path/to/your/project
 ```
 
-The tracked project receives `.contextbridge/config.json`, `.contextbridge/state.json`, `.contextbridge/HANDOFF.md`, and immutable named snapshots in `.contextbridge/snapshots/`. Its `.gitignore` is updated to exclude `.contextbridge/` by default.
+`init` creates `.contextbridge/config.json` and updates the selected project's `.gitignore` to exclude `.contextbridge/`. `checkpoint` later creates `.contextbridge/state.json`, `.contextbridge/HANDOFF.md`, and immutable named snapshots in `.contextbridge/snapshots/`. `memory add` creates the separate local journal. Neither command installs hooks or captures transcripts.
+
+## Supported V1 Assisted scope
+
+- **Assisted handoff:** manually record memory, create and verify a checkpoint, then explicitly run `next --agent codex` to start a fresh interactive CLI session. This does not resume or replace a VS Code conversation.
+- **Optional memory hooks:** explicit project-local opt-in for the checked Codex 0.166.0 contract and labeled memory blocks; trust review remains required. Hooks record unverified claims and do not checkpoint or switch sessions.
+- **Manual checkpoints:** explicit objectives, next steps, decisions, bounded memory and Git metadata; no source files or transcripts are captured automatically.
+- **Local telemetry imports:** explicit stdin imports of supported numeric events; no live collector. Active context occupancy stays unknown, including for existing VS Code sessions.
+- **Unavailable:** automatic context switching, rollover, compaction, retries, Claude handoff and real managed App Server execution. Managed experiments remain offline test foundations.
 
 ## Available commands
 
@@ -78,7 +118,7 @@ contextbridge memory list
 
 Use `node bin/contextbridge.mjs` in place of `contextbridge` when running from this checkout. All commands accept `--project /path/to/project`. `--file` may be repeated. `memory list` prints a JSON array in append order, which may differ from timestamp order. Text is preserved without translation or trimming.
 
-Events live in `.contextbridge/journal/events.jsonl`, excluded from Git by `init`. Each event contains a UUID, UTC timestamp, schema version, type, content, source, optional related files, and `verification: "unverified"`. Sources are `user-supplied` (default) or `agent-reported`, with an optional reference. Recording information never verifies its truth. The opt-in Codex hook adapter reuses this provider-neutral format. It captures only explicitly labeled assistant output; token monitoring remains unimplemented.
+Events live in `.contextbridge/journal/events.jsonl`, excluded from Git by `init`. Each event contains a UUID, UTC timestamp, schema version, type, content, source, optional related files, and `verification: "unverified"`. Sources are `user-supplied` (default) or `agent-reported`, with an optional reference. Recording information never verifies its truth. The opt-in Codex hook adapter reuses this provider-neutral format. It captures only explicitly labeled assistant output; live token monitoring remains unimplemented. Explicit local token-event imports are separate.
 
 Content is limited to 8,192 UTF-8 bytes; serialized events to 16,384 bytes. Source references are limited to 512 bytes and related paths to 32 portable project-relative paths. Unknown fields, invalid types, duplicates, unsafe paths, sensitive file names, and common credential patterns are rejected. Paths are metadata only: ContextBridge does not read their contents. Secret detection is heuristic and can miss credentials or reject innocent text; review content and references before saving. No redaction or translation silently changes accepted text. No network requests, external AI APIs, or telemetry are used by memory operations.
 
@@ -156,6 +196,7 @@ The preview does not parse or archive conversations. Do not store credentials or
 
 - [Architecture and execution blueprint](docs/BLUEPRINT.md)
 - [Implementation roadmap](docs/ROADMAP.md)
+- [V1 Assisted release readiness](docs/V1_ASSISTED_RELEASE_REPORT.md)
 - [Codex capture integration and manual verification](docs/CODEX_HOOKS.md)
 - [Local context telemetry](docs/CONTEXT_TELEMETRY.md)
 - [Language policy](docs/LANGUAGE_POLICY.md)

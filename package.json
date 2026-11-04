@@ -10,9 +10,20 @@
   "engines": {
     "node": ">=22.16.0"
   },
+  "files": [
+    "bin/*.mjs",
+    "dist/**/*.js",
+    "docs/*.md",
+    "integrations/**/*.md",
+    "CONTRIBUTING.md",
+    "SECURITY.md"
+  ],
   "scripts": {
+    "build": "node scripts/build.mjs",
+    "prepack": "npm run build",
     "dev": "node --experimental-strip-types src/cli.ts",
     "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test:package": "node --experimental-strip-types --test tests/package.test.ts",
     "check": "npm test"
   },
   "keywords": ["ai", "coding-agent", "context", "memory", "claude-code", "codex", "handoff"],

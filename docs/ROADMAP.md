@@ -7,8 +7,9 @@
 - [x] SHA-256 content integrity and pointer-last writes.
 - [x] English-only repository assets and contribution policy.
 - [x] Node built-in unit and CLI tests.
-- [ ] TypeScript package build and dependency lockfile for stable releases.
-- [ ] GitHub publication.
+- [x] Dependency-free JavaScript tarball build and installed-package smoke tests for the private V1 Assisted preview.
+- [ ] Pinned toolchain and reviewed packaging/publishing process for stable releases.
+- [x] Repository publication and merged M2.2b.5 baseline at `b32bb343a65f1226f37f92d37cc73d79711eae2d` (PR #10 in local history; release publication remains out of scope).
 - [x] Baseline macOS/Linux/Windows CI (completed according to the supplied M2.2b.3 request).
 
 ## M1 — Memory engine
@@ -163,9 +164,21 @@ See [M2.2b.4 report](M2_2B_4_REPORT.md). No mock evidence establishes real-runti
 - [x] Demonstrate descendants escaping through new sessions/groups and children surviving supervisor SIGKILL/hard exit; assert missing guarantees.
 - [x] Retain all M2.2b.1–4 behavior, authorization flags and disabled real managed execution; do not weaken existing process cleanup.
 - [x] Assess Linux delegated cgroup v2 and Windows Job Objects separately as unimplemented, locally unvalidated proposals.
-- [ ] Validate M2.2b.5 in macOS/Ubuntu/Windows CI; native experiment only executes on macOS.
+- [x] M2.2b.5 merged at `b32bb343a65f1226f37f92d37cc73d79711eae2d` (PR #10). Merged main CI passed macOS/Ubuntu/Windows according to the supplied V1 Assisted request; remote CI was not independently queried. Baseline: 342 tests, 341 passes and one expected macOS skip. The native experiment only executes on macOS.
 - [ ] Establish complete macOS descendant/lifetime ownership and pre-release filesystem/network isolation; reviewed primitives do not currently satisfy this gate.
 - [ ] Implement and independently validate Linux/Windows native mechanisms before considering platform eligibility; Windows execution stays disabled.
 - [ ] M2.2b.6 recommendation: investigate a macOS isolated-guest lifetime boundary with benign offline workloads and explicit host/broker, startup and controller-failure threats, or retain macOS as unsupported.
 
 See [M2.2b.5 report](M2_2B_5_REPORT.md). No production readiness, runtime credential continuity or real provider validation is claimed.
+
+
+## V1 Assisted — Private local preview readiness
+
+- [x] Explicit package allowlist, documented local tarball installation and no runtime dependencies.
+- [x] Retain Node 22 checkout type stripping; emit JavaScript at pack time to support installation under `node_modules`.
+- [x] Deterministic offline installed-package checks for help, init, memory provenance, checkpoint, verification, status, fresh mocked Codex handoff, exit codes and safe failures.
+- [x] Packaged hook worker smoke test with explicit disposable-project opt-in; no real provider or account state.
+- [x] Existing OS matrix includes installed-package tests; minimum Node 22.16 and current Node 22 are configured. These branch CI results remain pending remote execution.
+- [ ] Review publication name, release toolchain, security contact, external clean-machine installation and authenticated handoff compatibility before public distribution.
+
+See [V1 Assisted release report](V1_ASSISTED_RELEASE_REPORT.md). Prioritize usable assisted workflows; further managed prototypes are separate work. Real execution and automatic switching remain disabled or unimplemented.

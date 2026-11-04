@@ -3,6 +3,7 @@ import { isUtf8 } from 'node:buffer';
 import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, readFile, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
+import { ownsLock } from './lock.ts';
 import { loadConfig } from './config.ts';
 import { storeDir, writeJsonAtomic } from './storage.ts';
 
@@ -209,8 +210,7 @@ export async function appendMemory(root: string, event: MemoryEvent): Promise<Me
   const cleanupErrors: unknown[] = [];
   try { await lock.close(); } catch (error) { cleanupErrors.push(error); }
   try {
-    const current = await lstat(lockPath, { bigint: true });
-    if (owned && current.isFile() && !current.isSymbolicLink() && current.dev === owned.dev && current.ino === owned.ino) await unlink(lockPath);
+    if (await ownsLock(lockPath, owned)) await unlink(lockPath);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== 'ENOENT') cleanupErrors.push(error);
   }

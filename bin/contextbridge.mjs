@@ -2,9 +2,12 @@
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolve, dirname } from 'node:path';
+import { existsSync } from 'node:fs';
 
-const cli = resolve(dirname(fileURLToPath(import.meta.url)), '../src/cli.ts');
-const result = spawnSync(process.execPath, ['--experimental-strip-types', cli, ...process.argv.slice(2)], {
+const source = resolve(dirname(fileURLToPath(import.meta.url)), '../src/cli.ts');
+const runtime = existsSync(source) ? ['--experimental-strip-types', source]
+  : [resolve(dirname(fileURLToPath(import.meta.url)), '../dist/cli.js')];
+const result = spawnSync(process.execPath, [...runtime, ...process.argv.slice(2)], {
   stdio: 'inherit',
   env: process.env,
 });
