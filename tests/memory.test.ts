@@ -317,7 +317,7 @@ function interceptLock(t: TestContext, onLock: (handle: Awaited<ReturnType<typeo
   const original = fs.open;
   t.mock.method(fs, 'open', async (...args: Parameters<typeof fs.open>) => {
     const handle = await original(...args);
-    if (String(args[0]).endsWith('writer.lock')) onLock(handle);
+    if (String(args[0]).endsWith('writer.lock') && args[1] === 'wx') onLock(handle);
     return handle;
   });
   syncBuiltinESMExports();

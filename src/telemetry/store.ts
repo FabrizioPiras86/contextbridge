@@ -2,6 +2,7 @@ import { isUtf8 } from 'node:buffer';
 import type { BigIntStats } from 'node:fs';
 import { lstat, mkdir, open, rename, unlink } from 'node:fs/promises';
 import { join } from 'node:path';
+import { ownsLock } from '../lock.ts';
 import { loadConfig } from '../config.ts';
 import { digestOf, storeDir } from '../storage.ts';
 import { MAX_ACQUISITIONS, validateLifecycle, validateTransition } from '../managed/lifecycle.ts';
@@ -195,8 +196,7 @@ export async function ingestTelemetry(root: string, observation: TelemetryObserv
   const cleanup: unknown[] = [];
   try { await lock.close(); } catch (error) { cleanup.push(error); }
   try {
-    const current = await lstat(lockPath, { bigint: true });
-    if (owned && current.isFile() && !current.isSymbolicLink() && current.dev === owned.dev && current.ino === owned.ino) await unlink(lockPath);
+    if (await ownsLock(lockPath, owned)) await unlink(lockPath);
   } catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') cleanup.push(error); }
   if (failed && !cleanup.length) throw failure;
   if (cleanup.length) throw new AggregateError(failed ? [failure, ...cleanup] : cleanup, 'Telemetry operation or lock cleanup failed; inspect storage before retrying.', failed ? { cause: failure } : undefined);

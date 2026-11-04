@@ -57,15 +57,19 @@ test('local tarball installs offline and supports the assisted workflow', { time
   const preload = join(base, 'mock.cjs');
   const mock = `const fs = require('node:fs');
 const args = process.argv.slice(2);
-if (args[0] === '--version') console.log('codex-cli 0.166.0');
-else if (args[0] === 'features') console.log('hooks stable true');
+if (args[0] === '--version') console.log(process.env.CB_VERSION || 'codex-cli 0.166.0');
+else if (args[0] === 'features' && args[1] === 'list') console.log('hooks stable ' + (process.env.CB_HOOKS || 'true'));
 else {
   fs.appendFileSync(process.env.CB_RECORD, JSON.stringify({ args, cwd: process.cwd() }) + '\\n');
   process.exit(Number(process.env.CB_EXIT || 0));
 }`;
   if (process.platform === 'win32') {
     await copyFile(process.execPath, executable);
-    await writeFile(preload, `if (require('node:path').basename(process.execPath).toLowerCase() === 'codex.exe') { process.argv.splice(1, 0, 'mock'); ${mock} }`);
+    const script = join(base, 'codex-mock.cjs');
+    await writeFile(script, mock);
+    // Node handles --version before preloads. Prefix the script in the parent,
+    // leaving production compatibility parsing and real child execution intact.
+    await writeFile(preload, `require(${JSON.stringify(resolve('tests/fixtures/codex-launch.cjs'))})(${JSON.stringify(executable)}, ${JSON.stringify(script)}, ${JSON.stringify(mockBin)});`);
   } else {
     await writeFile(executable, `#!${process.execPath}\n${mock}`);
     await chmod(executable, 0o755);
@@ -148,6 +152,17 @@ else {
     assert.equal(await readFile(record, 'utf8'), before);
     assert.equal(await readFile(snapshotPath, 'utf8'), original);
     await assert.rejects(stat(join(stateDir, 'telemetry')), { code: 'ENOENT' });
+  });
+  await t.test('installed hook compatibility rejects unsupported versions and disabled hooks', async () => {
+    for (const [overrides, reason] of [
+      [{ CB_VERSION: 'codex-cli 0.165.0' }, /Only codex-cli 0\.166\.0/],
+      [{ CB_HOOKS: 'false' }, /hooks are unavailable or disabled/],
+    ] as const) {
+      const result = cli(['hooks', 'install', '--agent', 'codex', '--yes'], overrides);
+      assert.equal(result.status, 1, result.stderr);
+      assert.match(result.stderr, reason);
+      await assert.rejects(stat(join(project, '.codex')), { code: 'ENOENT' });
+    }
   });
   await t.test('packaged hook worker requires opt-in and captures only explicitly labeled claims', async () => {
     const denied = cli(['hooks', 'install', '--agent', 'codex']);
